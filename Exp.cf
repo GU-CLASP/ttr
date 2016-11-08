@@ -1,0 +1,65 @@
+entrypoints Module, Exp ;
+
+comment "--" ;
+comment "{-" "-}" ;
+
+layout "where", "let", "split", "mutual" ;
+layout stop "in" ;
+-- Do not use layout toplevel as it makes pExp fail!
+
+Module.   Module ::= "module" AIdent "where" "{" [Imp] [Decl] "}" ;
+
+Import.   Imp ::= "import" AIdent ;
+separator Imp ";" ;
+
+DeclDef.    Decl ::= AIdent [AIdent] "=" ExpWhere ;
+DeclType.   Decl ::= AIdent ":" Exp ;
+DeclData.   Decl ::= "data" AIdent [AIdent] "=" [Label] ;
+DeclMutual. Decl ::= "mutual" "{" [Decl] "}" ;
+separator   Decl ";" ;
+
+Where.    ExpWhere ::= Exp "where" "{" [Decl] "}" ;
+NoWhere.  ExpWhere ::= Exp ;
+
+Zero.     CExp ::= Integer ;
+CVar.     CExp ::= AIdent ;
+CMax.     CExp ::= CExp "\\/" CExp ;
+
+coercions CExp 2 ;
+
+Let.      Exp  ::= "let" "{" [Decl] "}" "in" Exp ;
+Lam.      Exp  ::= "\\" AIdent [AIdent] "->" Exp ;
+Split.    Exp  ::= "split" "{" [Branch] "}" ;
+Fun.      Exp1 ::= Exp2 "->" Exp1 ;
+Pi.       Exp1 ::= [PseudoTDecl] "->" Exp1 ;
+CPi.      Exp1 ::= "forall " AIdent [AIdent] "." Exp1 ;
+Sigma.    Exp1 ::= [PseudoTDecl] "*" Exp1 ;
+App.      Exp2 ::= Exp2 Exp3 ;
+Fst.      Exp3 ::= Exp3 ".1" ;
+Snd.      Exp3 ::= Exp3 ".2" ;
+Pair.     Exp3 ::= "(" Exp "," Exp ")" ;
+Var.      Exp3 ::= AIdent ;
+U.        Exp3 ::= "U" ;
+CU.       Exp3 ::= "#(" [AIdent] ")" ;
+coercions Exp 3 ;
+
+-- Branches
+Branch.   Branch ::= AIdent [AIdent] "->" ExpWhere ;
+separator Branch ";" ;
+
+-- Labelled sum alternatives
+Label.    Label   ::= AIdent [VTDecl] ;
+separator Label "|" ;
+
+
+-- Telescopes
+VTDecl.    VTDecl ::= "(" AIdent [AIdent] ":" Exp ")" ;
+terminator VTDecl "" ;
+
+-- Nonempty telescopes with Exp:s, this is hack to avoid ambiguities
+-- in the grammar when parsing Pi
+PseudoTDecl. PseudoTDecl ::= "(" Exp ":" Exp ")" ;
+terminator nonempty PseudoTDecl "" ;
+
+position token AIdent ((letter|'\''|'_'|'`')(letter|digit|'\''|'_')*) ;
+terminator AIdent "" ;
