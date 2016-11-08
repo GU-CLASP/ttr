@@ -17,7 +17,7 @@ import Exp.Layout
 import Exp.ErrM
 import Concrete
 import qualified TypeChecker as TC
-import qualified CTT as C
+import qualified TT as C
 import qualified Eval as E
 
 type Interpreter a = InputT IO a

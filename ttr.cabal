@@ -1,9 +1,8 @@
 name:                ttr
--- Same version as in Main.hs?
 version:             0.1.0
 synopsis:            Implementation of a type
 homepage:            https://github.com/jyp/ttr
-extra-source-files:  Makefile, README.md, Exp.cf, examples/*.cub, cubical.el
+extra-source-files:  Exp.cf
 license:             GPL3
 license-file:        LICENSE
 author:              Jean-Philippe Bernardy
@@ -12,7 +11,7 @@ category:            Dependent Types
 build-type:          Custom
 cabal-version:       >=1.10
 
-executable cubical
+executable ttr
   main-is:             Main.hs
   other-modules:       Exp.Lex, Exp.Par
   other-extensions:    TupleSections, ParallelListComp, CPP, MagicHash,

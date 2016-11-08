@@ -69,14 +69,13 @@ data SymKind = Variable | Constructor Arity
 
 -- local environment for constructors
 data Env = Env { envModule :: String,
-                 colors :: [C.TColor],
                  variables :: [(C.Binder,SymKind)] }
   deriving (Eq, Show)
 
 type Resolver a = ReaderT Env (ErrorT String Identity) a
 
 emptyEnv :: Env
-emptyEnv = Env "" [] []
+emptyEnv = Env "" []
 
 runResolver :: Resolver a -> Either String a
 runResolver x = runIdentity $ runErrorT $ runReaderT x emptyEnv
@@ -137,17 +136,6 @@ resolveVar (AIdent (l,x))
       _ -> throwError $
         "Cannot resolve variable" <+> x <+> "at position" <+>
         show l <+> "in module" <+> modName
-
-resolveCVar :: AIdent -> Resolver C.TColor
-resolveCVar (AIdent (l,x)) = do
-    modName <- getModule
-    cols  <- colors <$> ask
-    case [() | y <- cols, y == x] of
-      _:_      -> return $ x
-      _ -> throwError $
-        "Cannot resolve color" <+> x <+> "at position" <+>
-        show l <+> "in module" <+> modName
-                 
 
 lam :: AIdent -> Resolver Ter -> Resolver Ter
 lam a e = do x <- resolveBinder a; C.Lam x <$> local (insertVar x) e

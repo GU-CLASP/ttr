@@ -71,15 +71,19 @@ different a b = Just $ show a ++ " /= " ++ show b
 
 -- conversion test
 conv :: Int -> Val -> Val -> Maybe String
--- conv k (Ter (Lam cs x u) e) (Ter (Lam cs' x' u') e') = do
---   let v = mkVar k
---   cs `equal` cs' <> conv (k+1) (eval (Pair e (x,v)) u) (eval (Pair e' (x',v)) u')
--- conv k (Ter (Lam is x u) e) u' = do
---   let v = mkVar k
---   conv (k+1) (eval (Pair e (x,clams is v)) u) (app u' v)
--- conv k u' (Ter (Lam is x u) e) = do
---   let v = mkVar k
---   conv (k+1) (app u' v) (eval (Pair e (x,clams is v)) u)
+conv _ VU VU = Nothing
+conv k (VLam f) (VLam g) = do
+  let v = mkVar k
+  conv (k+1) (f v) (g v)
+conv k (Ter (Lam x u) e) (Ter (Lam x' u') e') = do
+  let v = mkVar k
+  conv (k+1) (eval (Pair e (x,v)) u) (eval (Pair e' (x',v)) u')
+conv k (Ter (Lam x u) e) u' = do
+  let v = mkVar k
+  conv (k+1) (eval (Pair e (x,v)) u) (app u' v)
+conv k u' (Ter (Lam x u) e) = do
+  let v = mkVar k
+  conv (k+1) (app u' v) (eval (Pair e (x,v)) u)
 conv k (Ter (Split p _) e) (Ter (Split p' _) e') =
   (p `equal` p') <> convEnv k e e'
 conv k (Ter (Sum p _) e)   (Ter (Sum p' _) e') =

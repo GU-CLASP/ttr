@@ -40,7 +40,6 @@ Snd.      Exp3 ::= Exp3 ".2" ;
 Pair.     Exp3 ::= "(" Exp "," Exp ")" ;
 Var.      Exp3 ::= AIdent ;
 U.        Exp3 ::= "U" ;
-CU.       Exp3 ::= "#(" [AIdent] ")" ;
 coercions Exp 3 ;
 
 -- Branches
