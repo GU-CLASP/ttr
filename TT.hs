@@ -1,8 +1,9 @@
-{-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE PatternSynonyms, OverloadedStrings #-}
 module TT where
 
+import Data.Monoid hiding (Sum)
 import Pretty
---------------------------------------------------------------------------------
+
 -- | Terms
 
 data Loc = Loc { locFile :: String
@@ -47,10 +48,9 @@ declDefs decl = [ (x,d) | (x,_,d) <- decl]
 data Ter = App Ter Ter
          | Pi Ter Ter
          | Lam Binder Ter
-         | Sigma Ter Ter
-         | SPair Ter Ter
-         | Fst Ter
-         | Snd Ter
+         | RecordT Tele
+         | Record [(String,Ter)]
+         | Proj String Ter
          | Where Ter Decls
          | Var Ident
          | U
@@ -78,18 +78,18 @@ mkWheres (d:ds) e = Where (mkWheres ds e) d
 --------------------------------------------------------------------------------
 -- | Values
 
+data VTele = VEmpty | VBind Ident Val (Val -> VTele)
+
 data Val = VU
          | Ter Ter Env
          | VPi Val Val
-         | VSigma Val Val
-         | VSPair Val Val
+         | VRecordT VTele
+         | VRecord [(String,Val)]
          | VCon Ident [Val]
          | VApp Val Val            -- the first Val must be neutral
          | VSplit Val Val          -- the second Val must be neutral
          | VVar String
-         | VFst Val
-         | VSnd Val
-
+         | VProj String Val
          | VLam (Val -> Val)
   -- deriving Eq
 
@@ -100,8 +100,7 @@ isNeutral :: Val -> Bool
 isNeutral (VApp u _)   = isNeutral u
 isNeutral (VSplit _ v) = isNeutral v
 isNeutral (VVar _)     = True
-isNeutral (VFst v)     = isNeutral v
-isNeutral (VSnd v)     = isNeutral v
+isNeutral (VProj _ v)     = isNeutral v
 isNeutral _            = False
 
 --------------------------------------------------------------------------------
@@ -110,13 +109,14 @@ isNeutral _            = False
 data Env = Empty
          | Pair Env (Binder,Val)
          | PDef [(Binder,Ter)] Env
-  -- deriving Eq
+  deriving (Show)
   
-instance Show Env where
-  show e0 = case e0 of
+instance Pretty Env where
+  pretty e0 = case e0 of
     Empty            -> ""
-    (PDef _xas env)   -> show env
-    (Pair env ((x,_),u)) -> show env ++ ", " ++ show (x,u)
+    (PDef _xas env)   -> pretty env
+    (Pair env ((x,_),u)) -> pretty env <> ", " <> pretty (x,u)
+
 
 upds :: Env -> [(Binder,Val)] -> Env
 upds = foldl Pair
@@ -139,68 +139,80 @@ instance Show Loc where
   show (Loc name (i,j)) = name ++ "_L" ++ show i ++ "_C" ++ show j
 
 instance Show Ter where
-  show = showTer
+  show = runD . showTer
 
-showTer :: Ter -> String
+instance Pretty Ter where
+  pretty = showTer
+
+showTele :: Tele -> D
+showTele [] = mempty
+showTele (((x,_loc),t):tele) = (return x <> " : " <> showTer t <> ";") $$ showTele tele
+  
+showTer :: Ter -> D
 showTer U             = "U"
 showTer (App e0 e1)   = showTer e0 <+> showTer1 e1
 showTer (Pi e0 e1)    = "Pi" <+> showTers [e0,e1]
-showTer (Lam (x,_) e) = '\\' : x <+> "->" <+> showTer e
-showTer (Fst e)       = showTer e ++ ".1"
-showTer (Snd e)       = showTer e ++ ".2"
-showTer (Sigma e0 e1) = "Sigma" <+> showTers [e0,e1]
-showTer (SPair e0 e1) = "pair" <+> showTers [e0,e1]
+showTer (Lam (x,_) e) = "\\" <> return x <+> "->" <+> showTer e
+showTer (Proj l e)       = showTer e <> "." <> return l
+showTer (RecordT ts)  = "[" <> showTele ts <> "]"
+showTer (Record fs)   = "(" <> hcat [return l <> " = " <> showTer e | (l,e) <- fs] <> ")"
 showTer (Where e d)   = showTer e <+> "where" <+> showDecls d
-showTer (Var x)       = x
-showTer (Con c es)    = c <+> showTers es
-showTer (Split l _)   = "split " ++ show l
-showTer (Sum l _)     = "sum " ++ show l
+showTer (Var x)       = return x
+showTer (Con c es)    = return c <+> showTers es
+showTer (Split l _)   = "split " <> return (show l)
+showTer (Sum l _)     = "sum " <> return (show l)
 showTer (Undef _)     = "undefined (1)"
 
-showTers :: [Ter] -> String
+showTers :: [Ter] -> D
 showTers = hcat . map showTer1
 
-showTer1 :: Ter -> String
+showTer1 :: Ter -> D
 showTer1 U           = "U"
-showTer1 (Con c [])  = c
-showTer1 (Var x)     = x
+showTer1 (Con c [])  = return c
+showTer1 (Var x)     = return x
 showTer1 u@(Split{}) = showTer u
 showTer1 u@(Sum{})   = showTer u
 showTer1 u           = parens $ showTer u
 
-showDecls :: Decls -> String
-showDecls defs = ccat (map (\((x,_),_,d) -> x <+> "=" <+> show d) defs)
-
-namesFrom :: [Char] -> [[Char]]
-namesFrom xs = [x ++ n | n <- "":map show [(1::Int)..], x <- map (:[]) xs]
+showDecls :: Decls -> D
+showDecls defs = ccat (map (\((x,_),_,d) -> return x <+> "=" <+> pretty d) defs)
 
 instance Show Val where
-  show = showVal $ namesFrom ['α'..'ω']
+  show = runD . showVal
 
-showVal :: [String] -> Val -> String
-showVal [] _ = error "showVal: out of names"
-showVal su@(s:ss) t0 = case t0 of
+instance Show VTele where
+  show = runD . pretty
+
+instance Pretty VTele where
+  pretty VEmpty = ""
+  pretty (VBind nm ty rest) = (return nm <> ":" <> showVal ty <> ";") <> pretty (rest $ VVar nm)
+
+instance Pretty Val where pretty = showVal
+
+showVal :: Val -> D
+showVal t0 = case t0 of
   VU            -> "U"
-  (Ter t env)  -> show t <+> show env
-  (VCon c us)  -> c <+> showVals su us
+  (Ter t env)  -> pretty t <+> pretty env
+  (VCon c us)  -> pretty c <+> showVals us
   (VPi a f)    -> "Pi" <+> svs [a,f]
   (VApp u v)   -> sv u <+> sv1 v
   (VSplit u v) -> sv u <+> sv1 v
-  (VVar x)     -> x
-  (VSPair u v) -> "pair" <+> svs [u,v]
-  (VSigma u v) -> "Sigma" <+> svs [u,v]
-  (VFst u)     -> sv u ++ ".1"
-  (VSnd u)     -> sv u ++ ".2"
-  (VLam f)  -> "\\" ++ s ++ " -> " <+> showVal ss (f $ VVar s)
- where sv = showVal su
-       sv1 = showVal1 su
-       svs = showVals su
+  (VVar x)     -> return x
+  (VRecordT tele) -> "[" <+> pretty tele <+>  "]"
+  (VRecord fs)   -> "(" <> hcat [return l <> " = " <> showVal e | (l,e) <- fs] <> ")"
+  (VProj f u)     -> sv u <> "." <> return f
+  (VLam f)  -> do
+    s <- getSupply
+    "\\" <> return s <> " -> " <+> showVal (f $ VVar s)
+ where sv = showVal
+       sv1 = showVal1
+       svs = showVals
 
-showVals :: [String] -> [Val] -> String
-showVals su = hcat . map (showVal1 su)
+showVals :: [Val] -> D
+showVals = hcat . map showVal1
 
-showVal1 :: [String] -> Val -> String
-showVal1 _ VU          = "U"
-showVal1 _ (VCon c []) = c
-showVal1 su u@(VVar{})  = showVal su u
-showVal1 su u           = parens $ showVal su u
+showVal1 :: Val -> D
+showVal1 VU          = "U"
+showVal1 (VCon c []) = return c
+showVal1 u@(VVar{})  = showVal u
+showVal1 u           = parens $ showVal u

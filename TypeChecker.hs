@@ -149,9 +149,8 @@ check a t = case (a,t) of
     var <- getFresh
     rho <- asks env
     local (addTypeVal (x,a)) $ check (app f var) t
-  (VSigma a f, SPair t1 t2) -> do
-    v <- checkEval a t1
-    check (app f v) t2
+  (VRecordT ts, Record fs) -> do
+    checkRecord ts fs
   (_,Where e d) -> do
     checkDecls d
     localM (addDecls d) $ check a e
@@ -161,6 +160,14 @@ check a t = case (a,t) of
        v <- checkInfer t
        checkConv "inferred type" a v
 
+checkRecord :: VTele -> [(String,Ter)] -> Typing ()
+checkRecord VEmpty [] = return ()
+checkRecord (VBind x a r) ((x',t):ts) 
+  | x /= x' = oops $ "got field " ++ show x' ++ " in value, but have " ++ show x ++ " in type."
+  | otherwise = do
+      t' <- checkEval a t
+      checkRecord (r t') ts
+ 
 
 arrs :: [Val] -> Val -> Val
 arrs [] t = t
@@ -202,14 +209,16 @@ inferType t = do
    VU -> return a
    _ -> oops $ show a ++ " is not a type"
 
+-- | Infer the type of the argument
 checkInfer :: Ter -> Typing Val
 checkInfer e = case e of
   Pi a (Lam x b) -> do
-    inferType a
+    _ <- inferType a
     localM (addType (x,a)) $ inferType b
-  Sigma a (Lam x b) -> do
+  RecordT [] -> return VU
+  RecordT ((x,a):as) -> do
     inferType a
-    localM (addType (x,a)) $ inferType b
+    localM (addType (x,a)) $ inferType (RecordT as)
   U -> return VU                 -- U : U
   Var n -> do
     gam <- ctxt <$> ask
@@ -225,23 +234,27 @@ checkInfer e = case e of
         let v = eval rho u
         return $ app f v
       _       -> oops $ show c ++ " is not a product"
-  Fst t -> do
-    c <- checkInfer t
-    case c of
-      VSigma a f -> return a
-      _          -> oops $ show c ++ " is not a sigma-type"
-  Snd t -> do
-    c <- checkInfer t
-    case c of
-      VSigma a f -> do
-        e <- asks env
-        let v = eval e t
-        return $ app f (fstSVal v)
-      _          -> oops $ show c ++ " is not a sigma-type"
+  Proj l t -> do
+    a <- checkInfer t
+    t' <- eval' t
+    case a of
+      VRecordT rt -> checkInferProj l t' rt
+      _          -> oops $ show a ++ " is not a record-type"
   Where t d -> do
     checkDecls d
     localM (addDecls d) $ checkInfer t
   _ -> oops ("checkInfer " ++ show e)
+
+checkInferProj ::
+  String -> -- ^ field to project
+  Val -> -- ^ record value
+  VTele -> -- record type
+  Typing Val
+  
+checkInferProj l _ VEmpty = oops $ "field not found:" ++ l
+checkInferProj l r (VBind x a rest)
+  | x == l = return a
+  | otherwise = checkInferProj l r (rest (projVal x r))
 
 extractFun :: Int -> Val -> Typing ([Val],Val)
 extractFun 0 a = return ([],a)
@@ -259,23 +272,9 @@ checks ((x,a):xas,nu) (e:es) = do
   checks (xas,Pair nu (x,v')) es
 checks _              _      = oops "checks"
 
--- Not used since we have U : U
---
--- (=?=) :: Typing Ter -> Ter -> Typing ()
--- m =?= s2 = do
---   s1 <- m
---   unless (s1 == s2) $ oops (show s1 ++ " =/= " ++ show s2)
---
--- checkTs :: [(String,Ter)] -> Typing ()
--- checkTs [] = return ()
--- checkTs ((x,a):xas) = do
---   checkType a
---   local (addType (x,a)) (checkTs xas)
---
--- checkType :: Ter -> Typing ()
--- checkType t = case t of
---   U              -> return ()
---   Pi a (Lam x b) -> do
---     checkType a
---     local (addType (x,a)) (checkType b)
---   _ -> checkInfer t =?= U
+checkType :: Ter -> Typing ()
+checkType t = do
+  t' <- inferType t
+  case t' of
+    VU -> oops $ "type expected but got" ++ show t'
+    _ -> return ()

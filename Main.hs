@@ -28,14 +28,12 @@ data Flag = Debug | Help | Version
 
 options :: [OptDescr Flag]
 options = [ Option "d" ["debug"]   (NoArg Debug)   "run in debugging mode"
-          , Option ""  ["help"]    (NoArg Help)    "print help"
-          , Option ""  ["version"] (NoArg Version) "print version number" ]
+          , Option ""  ["help"]    (NoArg Help)    "print help" ]
 
 -- Version number, welcome message, usage and prompt strings
-version, welcome, usage, prompt :: String
-version = "0.2.0"
-welcome = "cubical, version: " ++ version ++ "  (:h for help)\n"
-usage   = "Usage: cubical [options] <file.cub>\nOptions:"
+welcome, usage, prompt :: String
+welcome = "ttr\n"
+usage   = "Usage: ttr [options] <file.tt>\nOptions:"
 prompt  = "> "
 
 lexer :: String -> [Token]
@@ -62,7 +60,6 @@ main = do
   case getOpt Permute options args of
     (flags,files,[])
       | Help    `elem` flags -> putStrLn $ usageInfo usage options
-      | Version `elem` flags -> putStrLn version
       | otherwise -> case files of
        []  -> do
          putStrLn welcome

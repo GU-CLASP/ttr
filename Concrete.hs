@@ -1,5 +1,4 @@
-{-# LANGUAGE TupleSections, ParallelListComp #-}
-{-# OPTIONS_GHC -fdefer-type-errors #-}
+{-# LANGUAGE TupleSections, ParallelListComp, OverloadedStrings #-}
 
 -- | Convert the concrete syntax into the syntax of cubical TT.
 module Concrete where
@@ -59,6 +58,8 @@ pseudoTele (PseudoTDecl exp typ : pd) = do
     pt  <- pseudoTele pd
     return $ map (,typ) ids ++ pt
 
+
+err = throwError . runD
 -------------------------------------------------------------------------------
 -- | Resolver and environment
 
@@ -133,19 +134,15 @@ resolveVar (AIdent (l,x))
     case C.getIdent x vars of
       Just Variable        -> return $ C.Var x
       Just (Constructor a) -> expandConstr a x []
-      _ -> throwError $
-        "Cannot resolve variable" <+> x <+> "at position" <+>
-        show l <+> "in module" <+> modName
+      _ -> throwError $ runD $ 
+        "Cannot resolve variable" <+> return x <+> "at position" <+>
+        return (show l) <+> "in module" <+> return modName
 
 lam :: AIdent -> Resolver Ter -> Resolver Ter
 lam a e = do x <- resolveBinder a; C.Lam x <$> local (insertVar x) e
 
 lams :: [AIdent] -> Resolver Ter -> Resolver Ter
 lams = flip $ foldr lam
-
-cpis :: [AIdent] -> Resolver Ter -> Resolver Ter
-cpis [] x = x
-cpis (i:is) x = cpi i $ cpis is x
 
 bind :: (Ter -> Ter -> Ter) -> (AIdent, Exp) -> Resolver Ter -> Resolver Ter
 bind f (x,t) e = f <$> resolveExp t <*> lam x e
@@ -166,18 +163,17 @@ resolveExp (App t s)    = case unApps t [s] of
       _ -> C.mkApps <$> resolveExp x <*> mapM resolveExp xs
   (x,xs) -> C.mkApps <$> resolveExp x <*> mapM resolveExp xs
 
-resolveExp (Sigma t b)  = case pseudoTele t of
-  Just tele -> binds C.Sigma tele (resolveExp b)
-  Nothing   -> throwError "Telescope malformed in Sigma"
-resolveExp (Pi t b)     =  case pseudoTele t of
+resolveExp (Record t)  = case pseudoTele t of
+  Just tele -> C.RecordT <$> resolveTele tele
+  Nothing   -> err "Telescope malformed in Sigma"
+resolveExp (Pi t b)     =  case pseudoTele [t] of
   Just tele -> binds C.Pi tele (resolveExp b)
-  Nothing   -> throwError "Telescope malformed in Pigma"
+  Nothing   -> err "Telescope malformed in Pigma"
 resolveExp (Fun a b)    = bind C.Pi (AIdent ((0,0),"_"), a) (resolveExp b)
 resolveExp (Lam x xs t) = do
   lams (x:xs) (resolveExp t)
-resolveExp (Fst t)      = C.Fst <$> resolveExp t
-resolveExp (Snd t)      = C.Snd <$> resolveExp t
-resolveExp (Pair t0 t1) = C.SPair <$> resolveExp t0 <*> resolveExp t1
+resolveExp (Proj t (AIdent (_,field))) = C.Proj field <$> resolveExp t
+resolveExp (Tuple fs) = C.Record <$> mapM (\(Field (AIdent (_,f)) t0) -> (f,) <$> resolveExp t0) fs
 resolveExp (Split brs)  = do
     brs' <- mapM resolveBranch brs
     loc  <- getLoc (case brs of Branch (AIdent (l,_)) _ _:_ -> l ; _ -> (0,0))
@@ -219,7 +215,10 @@ resolveDDecl (DeclDef  (AIdent (_,n)) args body) =
   (n,) <$> lams args (resolveWhere body)
 resolveDDecl (DeclData x@(AIdent (_,n)) args sum) =
   (n,) <$> (lams args (C.Sum <$> resolveBinder x <*> mapM resolveLabel sum))
-resolveDDecl d = throwError $ "Definition expected" <+> show d
+resolveDDecl d = err $ "Definition expected" <+> return (show d)
+
+showy :: Show a => a -> D
+showy = return . show
 
 -- Resolve mutual declarations (possibly one)
 resolveMutuals :: [Decl] -> Resolver (C.Decls,[(C.Binder,SymKind)])
@@ -228,11 +227,11 @@ resolveMutuals decls = do
     cs      <- declsLabels decls
     let cns = map (fst . fst) cs ++ names
     when (nub cns /= cns) $
-      throwError $ "Duplicated constructor or ident:" <+> show cns
+      err $ "Duplicated constructor or ident:" <+> showy cns
     rddecls <-
       mapM (local (insertVars binders . insertCons cs) . resolveDDecl) ddecls
     when (names /= map fst rddecls) $
-      throwError $ "Mismatching names in" <+> show decls
+      err $ "Mismatching names in" <+> showy decls
     rtdecls <- resolveTele tdecls
     return ([ (x,t,d) | (x,t) <- rtdecls | (_,d) <- rddecls ],
             map (second Constructor) cs ++ map (,Variable) binders)
@@ -254,7 +253,7 @@ resolveDecls (DeclMutual defs : ds) = do
   (rdefs,names)  <- resolveMutuals defs
   (rds,  names') <- local (insertBinders names) $ resolveDecls ds
   return (rdefs : rds, names' ++ names)
-resolveDecls (decl:_) = throwError $ "Invalid declaration:" <+> show decl
+resolveDecls (decl:_) = err $ "Invalid declaration:" <+> showy decl
 
 resolveModule :: Module -> Resolver ([C.Decls],[(C.Binder,SymKind)])
 resolveModule (Module n _imports decls) =

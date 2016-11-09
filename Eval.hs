@@ -1,3 +1,4 @@
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE PatternSynonyms #-}
 module Eval where
 
@@ -6,7 +7,7 @@ import Control.Applicative
 import Data.Monoid hiding (Sum)
 
 look :: Ident -> Env -> (Binder, Val)
-look x (Pair rho (n@(y,l),u))
+look x (Pair rho (n@(y,_l),u))
   | x == y    = (n, u)
   | otherwise = look x rho
 look x r@(PDef es r1) = case lookupIdent x es of
@@ -14,24 +15,26 @@ look x r@(PDef es r1) = case lookupIdent x es of
   Nothing     -> look x r1
 
 
-
 eval :: Env -> Ter -> Val
-eval e U               = VU
+eval _ U               = VU
 eval e (App r s)       = app (eval e r) (eval e s)
 eval e (Var i)         = snd (look i e)
 eval e (Pi a b)        = VPi (eval e a) (eval e b)
 -- eval e (Lam is x t)    = Ter (Lam is x t) e -- stop at lambdas
 eval e (Lam x t)       = VLam $ \x' -> eval (Pair e (x,x')) t
-eval e (Sigma a b)     = VSigma (eval e a) (eval e b)
-eval e (SPair a b)     = VSPair (eval e a) (eval e b)
-eval e (Fst a)         = fstSVal (eval e a)
-eval e (Snd a)         = sndSVal (eval e a)
+eval e (RecordT bs)      = VRecordT $ evalTele e bs
+eval e (Record fs)     = VRecord [(l,eval e x) | (l,x) <- fs]
+eval e (Proj l a)        = projVal l (eval e a)
 eval e (Where t decls) = eval (PDef [ (x,y) | (x,_,y) <- decls ] e) t
 eval e (Con name ts)   = VCon name (map (eval e) ts)
 eval e (Split pr alts) = Ter (Split pr alts) e
 eval e (Sum pr ntss)   = Ter (Sum pr ntss) e
 eval _ (Undef _)       = error "undefined (2)"
 
+evalTele :: Env -> Tele -> VTele
+evalTele _ [] = VEmpty
+evalTele e (((x,l),t):ts) = VBind x t' (\x' -> evalTele (Pair e ((x,l),x')) ts)
+  where t' = eval e t
 
 app :: Val -> Val -> Val
 app (VLam f) u = f u
@@ -53,13 +56,12 @@ evals env bts = [ (b,eval env t) | (b,t) <- bts ]
 second :: (t -> t2) -> (t1, t) -> (t1, t2)
 second f (a,b) = (a, f b)
 
-fstSVal, sndSVal :: Val -> Val
-fstSVal (VSPair a _)    = a
-fstSVal u | isNeutral u = VFst u
-          | otherwise   = error $ show u ++ " should be neutral"
-sndSVal (VSPair _ b)    = b
-sndSVal u | isNeutral u = VSnd u
-          | otherwise   = error $ show u ++ " should be neutral"
+projVal :: String -> Val -> Val
+projVal l (VRecord fs)    = case lookup l fs of
+  Just x -> x
+  Nothing -> error $ "projVal: could not find field " ++ show l
+projVal l u | isNeutral u = VProj l u
+            | otherwise   = error $ show u ++ " should be neutral"
 
 convs :: Int -> [Val] -> [Val] -> Maybe String
 convs k a b = mconcat $ zipWith (conv k) a b
@@ -67,9 +69,10 @@ convs k a b = mconcat $ zipWith (conv k) a b
 equal :: (Show a, Eq a) => a -> a -> Maybe [Char]
 equal a b | a == b = Nothing
           | otherwise = different a b
+
+different :: (Show a) => a -> a -> Maybe [Char]
 different a b = Just $ show a ++ " /= " ++ show b
 
--- conversion test
 conv :: Int -> Val -> Val -> Maybe String
 conv _ VU VU = Nothing
 conv k (VLam f) (VLam g) = do
@@ -93,18 +96,12 @@ conv k (Ter (Undef p) e) (Ter (Undef p') e') =
 conv k (VPi u v) (VPi u' v') = do
   let w = mkVar k
   conv k u u' <> conv (k+1) (app v w) (app v' w)
-conv k (VSigma u v) (VSigma u' v') = do
-  let w = mkVar k
-  conv k u u' <> conv (k+1) (app v w) (app v' w)
-conv k (VFst u) (VFst u') = conv k u u'
-conv k (VSnd u) (VSnd u') = conv k u u'
+conv k (VRecordT fs) (VRecordT fs') = 
+  convTele k fs fs'
+conv k (VProj l u) (VProj l' u') = equal l l' <> conv k u u'
 conv k (VCon c us) (VCon c' us') =
   (c `equal` c') <> mconcat (zipWith (conv k) us us')
-conv k (VSPair u v) (VSPair u' v') = conv k u u' <> conv k v v'
-conv k (VSPair u v) w              =
-  conv k u (fstSVal w) <> conv k v (sndSVal w)
-conv k w            (VSPair u v)   =
-  conv k (fstSVal w) u <> conv k (sndSVal w) v
+conv k (VRecord fs) (VRecord fs') = convFields k fs fs'
 conv k (VApp u v)   (VApp u' v')   = conv k u u' <> conv k v v'
 conv k (VSplit u v) (VSplit u' v') = conv k u u' <> conv k v v'
 conv _ (VVar x)     (VVar x')      = x `equal` x'
@@ -113,3 +110,16 @@ conv _ x              x'           = different x x'
 convEnv :: Int -> Env -> Env -> Maybe String
 convEnv k e e' = mconcat $ zipWith (conv k) (valOfEnv e) (valOfEnv e')
 
+
+convTele :: Int -> VTele -> VTele -> Maybe String
+convTele _ VEmpty VEmpty = Nothing
+convTele k (VBind l a t) (VBind l' a' t') = do
+  let v = mkVar k
+  equal l l' <> conv k a a' <> convTele (k+1) (t v) (t' v)
+convTele _ x x' = different x x'
+
+
+convFields :: Int -> [(String,Val)] -> [(String,Val)] -> Maybe String
+convFields _ [] [] = Nothing
+convFields k ((l,u):fs) ((l',u'):fs') = equal l l' <> conv k u u' <> convFields k fs fs'
+convFields _ x x' = different x x'

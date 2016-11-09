@@ -12,6 +12,9 @@ Module.   Module ::= "module" AIdent "where" "{" [Imp] [Decl] "}" ;
 Import.   Imp ::= "import" AIdent ;
 separator Imp ";" ;
 
+Field.      Fld ::= AIdent "=" Exp ;
+separator Fld ",";
+
 DeclDef.    Decl ::= AIdent [AIdent] "=" ExpWhere ;
 DeclType.   Decl ::= AIdent ":" Exp ;
 DeclData.   Decl ::= "data" AIdent [AIdent] "=" [Label] ;
@@ -31,16 +34,17 @@ Let.      Exp  ::= "let" "{" [Decl] "}" "in" Exp ;
 Lam.      Exp  ::= "\\" AIdent [AIdent] "->" Exp ;
 Split.    Exp  ::= "split" "{" [Branch] "}" ;
 Fun.      Exp1 ::= Exp2 "->" Exp1 ;
-Pi.       Exp1 ::= [PseudoTDecl] "->" Exp1 ;
+Pi.       Exp1 ::= "(" PseudoTDecl ")" "->" Exp1 ;
 CPi.      Exp1 ::= "forall " AIdent [AIdent] "." Exp1 ;
-Sigma.    Exp1 ::= [PseudoTDecl] "*" Exp1 ;
+Record.   Exp1 ::= "[" [PseudoTDecl] "]"  ;
 App.      Exp2 ::= Exp2 Exp3 ;
-Fst.      Exp3 ::= Exp3 ".1" ;
-Snd.      Exp3 ::= Exp3 ".2" ;
-Pair.     Exp3 ::= "(" Exp "," Exp ")" ;
+Proj.     Exp3 ::= Exp3 "." AIdent ;
+Tuple.     Exp3 ::= "(" [Fld] ")" ;
 Var.      Exp3 ::= AIdent ;
 U.        Exp3 ::= "U" ;
 coercions Exp 3 ;
+
+separator Exp ",";
 
 -- Branches
 Branch.   Branch ::= AIdent [AIdent] "->" ExpWhere ;
@@ -57,8 +61,9 @@ terminator VTDecl "" ;
 
 -- Nonempty telescopes with Exp:s, this is hack to avoid ambiguities
 -- in the grammar when parsing Pi
-PseudoTDecl. PseudoTDecl ::= "(" Exp ":" Exp ")" ;
-terminator nonempty PseudoTDecl "" ;
+PseudoTDecl. PseudoTDecl ::=  Exp ":" Exp ;
+
+separator nonempty PseudoTDecl ";" ;
 
 position token AIdent ((letter|'\''|'_'|'`')(letter|digit|'\''|'_')*) ;
 terminator AIdent "" ;
