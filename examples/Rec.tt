@@ -1,0 +1,23 @@
+module Rec where
+
+Sigma : (A : U) -> (B : A -> U) -> U
+Sigma A B = [ fst : A ; snd : B fst]
+
+
+first : (A : U) -> (B : A -> U) -> Sigma A B -> A
+first A B r = r.fst
+
+second : (A : U) -> (B : A -> U) -> (r : Sigma A B) -> B (r.fst)
+second A B r = r.snd
+
+
+second' : (A : U) -> (B : A -> U) -> (r : Sigma A B) -> B (first A B r)
+second' A B r = r.snd
+
+
+
+
+
+
+
+
