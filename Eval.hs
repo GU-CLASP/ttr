@@ -73,6 +73,7 @@ equal a b | a == b = Nothing
 different :: (Show a) => a -> a -> Maybe [Char]
 different a b = Just $ show a ++ " /= " ++ show b
 
+-- | @conv k a b@ Checks that @a@ can be converted to @b@.
 conv :: Int -> Val -> Val -> Maybe String
 conv _ VU VU = Nothing
 conv k (VLam f) (VLam g) = do
@@ -95,7 +96,7 @@ conv k (Ter (Undef p) e) (Ter (Undef p') e') =
   (p `equal` p') <> convEnv k e e'
 conv k (VPi u v) (VPi u' v') = do
   let w = mkVar k
-  conv k u u' <> conv (k+1) (app v w) (app v' w)
+  conv k u' u  <> conv (k+1) (app v w) (app v' w)
 conv k (VRecordT fs) (VRecordT fs') = 
   convTele k fs fs'
 conv k (VProj l u) (VProj l' u') = equal l l' <> conv k u u'
@@ -112,7 +113,7 @@ convEnv k e e' = mconcat $ zipWith (conv k) (valOfEnv e) (valOfEnv e')
 
 
 convTele :: Int -> VTele -> VTele -> Maybe String
-convTele _ VEmpty VEmpty = Nothing
+convTele _ _ VEmpty = Nothing
 convTele k (VBind l a t) (VBind l' a' t') = do
   let v = mkVar k
   equal l l' <> conv k a a' <> convTele (k+1) (t v) (t' v)

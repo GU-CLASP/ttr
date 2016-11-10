@@ -161,13 +161,13 @@ check a t = case (a,t) of
        checkConv "inferred type" a v
 
 checkRecord :: VTele -> [(String,Ter)] -> Typing ()
-checkRecord VEmpty [] = return ()
-checkRecord (VBind x a r) ((x',t):ts) 
-  | x /= x' = oops $ "got field " ++ show x' ++ " in value, but have " ++ show x ++ " in type."
-  | otherwise = do
+checkRecord VEmpty _ = return () -- other fields are ignored.
+checkRecord (VBind x a r) ts =
+  case lookup x ts of
+    Nothing -> oops $ "type expects field " ++ show x ++ " but it can't be found in the term."
+    Just t -> do
       t' <- checkEval a t
       checkRecord (r t') ts
- 
 
 arrs :: [Val] -> Val -> Val
 arrs [] t = t
@@ -186,6 +186,7 @@ eval' t = do
 checkConvs :: String -> [Val] -> [Val] -> Typing ()
 checkConvs msg a v = sequence_ [checkConv msg a' v' | (a',v') <- zip a v]
   
+checkConv :: [Char] -> Val -> Val -> ReaderT TEnv (ErrorT String IO) ()
 checkConv msg a v = do
     k <- index <$> ask
     case conv k v a of
