@@ -1,0 +1,18 @@
+module Reals where
+
+Real : U
+Real = primitive "#R"
+
+plus : Real -> Real -> Real
+plus x y = (primitive "+") x y
+
+Bot : U
+data Bot =
+
+Top : U
+data Top = top
+
+eqReal : Real -> Real -> U
+eqReal x y = (primitive "=") x y Top Bot
+
+

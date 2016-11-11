@@ -1,3 +1,5 @@
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE PatternSynonyms #-}
 module Eval where
@@ -5,6 +7,7 @@ module Eval where
 import TT
 import Control.Applicative
 import Data.Monoid hiding (Sum)
+import Data.Dynamic
 
 look :: Ident -> Env -> (Binder, Val)
 look x (Pair rho (n@(y,_l),u))
@@ -30,6 +33,28 @@ eval e (Con name ts)   = VCon name (map (eval e) ts)
 eval e (Split pr alts) = Ter (Split pr alts) e
 eval e (Sum pr ntss)   = Ter (Sum pr ntss) e
 eval _ (Undef _)       = error "undefined (2)"
+eval _ (Real r)        = VPrim (toDyn r) (show r)
+eval _ (Prim ('#':nm)) = VAbstract nm []
+eval _ (Prim nm)       = lkPrim nm
+
+abstract :: String -> [Val] -> Val
+abstract x = VAbstract x
+
+lkPrim :: String -> Val
+lkPrim "+" = VLam $ \vx -> VLam $ \vy -> case (vx,vy) of
+    (VPrim (fromDynamic -> Just (x::Double)) x', VPrim (fromDynamic -> Just y) y') -> VPrim (toDyn (x+y)) (x' ++ "+" ++ y')
+    _ -> abstract "+" [vx,vy]
+lkPrim p = abstract p []
+
+real = VAbstract "R" []
+
+infixr -->
+a --> b = VPi a $ VLam $ \_ -> b
+lkPrimTy :: String -> Val
+lkPrimTy "+" = real --> real --> real
+lkPrimTy "=" = real --> real --> VU --> VU --> VU
+lkPrimTy "#R" = VU
+lkPrimTy p = error ("No type for primitive: " ++ show p)
 
 evalTele :: Env -> Tele -> VTele
 evalTele _ [] = VEmpty
@@ -52,9 +77,6 @@ app r s | isNeutral r = VApp r s -- r should be neutral
 
 evals :: Env -> [(Binder,Ter)] -> [(Binder,Val)]
 evals env bts = [ (b,eval env t) | (b,t) <- bts ]
-
-second :: (t -> t2) -> (t1, t) -> (t1, t2)
-second f (a,b) = (a, f b)
 
 projVal :: String -> Val -> Val
 projVal l (VRecord fs)    = case lookup l fs of
@@ -106,11 +128,12 @@ conv k (VRecord fs) (VRecord fs') = convFields k fs fs'
 conv k (VApp u v)   (VApp u' v')   = conv k u u' <> conv k v v'
 conv k (VSplit u v) (VSplit u' v') = conv k u u' <> conv k v v'
 conv _ (VVar x)     (VVar x')      = x `equal` x'
+conv k (VAbstract n us) (VAbstract n' us') = n `equal` n' <> convs k us us'
+conv _ (VPrim _ _) (VPrim _ _) = Nothing
 conv _ x              x'           = different x x'
 
 convEnv :: Int -> Env -> Env -> Maybe String
 convEnv k e e' = mconcat $ zipWith (conv k) (valOfEnv e) (valOfEnv e')
-
 
 convTele :: Int -> VTele -> VTele -> Maybe String
 convTele _ _ VEmpty = Nothing

@@ -181,6 +181,8 @@ resolveExp (Split brs)  = do
 resolveExp (Let decls e) = do
   (rdecls,names) <- resolveDecls decls
   C.mkWheres rdecls <$> local (insertBinders names) (resolveExp e)
+resolveExp (Real r) = return (C.Real r)
+resolveExp (PrimOp p) = return (C.Prim p)
 
 resolveExps :: [Exp] -> Resolver [Ter]
 resolveExps ts = traverse resolveExp ts
@@ -208,7 +210,7 @@ declsLabels :: [Decl] -> Resolver [(C.Binder,Arity)]
 declsLabels decls = do
   let sums = concat [sum | DeclData _ _ sum <- decls]
   sequence [ (,length args) <$> resolveBinder lbl | Label lbl args <- sums ]
-  
+
 -- Resolve Data or Def declaration
 resolveDDecl :: Decl -> Resolver (C.Ident, C.Ter)
 resolveDDecl (DeclDef  (AIdent (_,n)) args body) =
@@ -216,9 +218,6 @@ resolveDDecl (DeclDef  (AIdent (_,n)) args body) =
 resolveDDecl (DeclData x@(AIdent (_,n)) args sum) =
   (n,) <$> (lams args (C.Sum <$> resolveBinder x <*> mapM resolveLabel sum))
 resolveDDecl d = err $ "Definition expected" <+> return (show d)
-
-showy :: Show a => a -> D
-showy = return . show
 
 -- Resolve mutual declarations (possibly one)
 resolveMutuals :: [Decl] -> Resolver (C.Decls,[(C.Binder,SymKind)])

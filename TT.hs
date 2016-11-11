@@ -1,8 +1,10 @@
+{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE PatternSynonyms, OverloadedStrings #-}
 module TT where
 
 import Data.Monoid hiding (Sum)
 import Pretty
+import Data.Dynamic
 
 -- | Terms
 
@@ -61,6 +63,8 @@ data Ter = App Ter Ter
          -- labelled sum c1 A1s,..., cn Ans (assumes terms are constructors)
          | Sum Binder LblSum
          | Undef Loc
+         | Prim String
+         | Real Double
 
   deriving Eq
 
@@ -91,6 +95,8 @@ data Val = VU
          | VVar String
          | VProj String Val
          | VLam (Val -> Val)
+         | VPrim Dynamic String
+         | VAbstract String [Val]
   -- deriving Eq
 
 mkVar :: Int -> Val
@@ -147,7 +153,7 @@ instance Pretty Ter where
 showTele :: Tele -> D
 showTele [] = mempty
 showTele (((x,_loc),t):tele) = (return x <> " : " <> showTer t <> ";") $$ showTele tele
-  
+
 showTer :: Ter -> D
 showTer U             = "U"
 showTer (App e0 e1)   = showTer e0 <+> showTer1 e1
@@ -162,6 +168,8 @@ showTer (Con c es)    = return c <+> showTers es
 showTer (Split l _)   = "split " <> return (show l)
 showTer (Sum l _)     = "sum " <> return (show l)
 showTer (Undef _)     = "undefined (1)"
+showTer (Real r)      = showy r
+showTer (Prim n)      = showy n
 
 showTers :: [Ter] -> D
 showTers = hcat . map showTer1
@@ -204,6 +212,8 @@ showVal t0 = case t0 of
   (VLam f)  -> do
     s <- getSupply
     "\\" <> return s <> " -> " <+> showVal (f $ VVar s)
+  (VPrim _ nm) -> return nm
+  (VAbstract nm as) -> return nm <> "(" <> svs as <> ")"
  where sv = showVal
        sv1 = showVal1
        svs = showVals

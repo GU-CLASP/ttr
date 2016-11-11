@@ -64,3 +64,7 @@ instance Pretty String where
 
 instance (Pretty a, Pretty b) => Pretty (a,b) where
   pretty (x,y) = "(" <> pretty x <> "," <> pretty y <> ")"
+
+showy :: Show a => a -> D
+showy = return . show
+

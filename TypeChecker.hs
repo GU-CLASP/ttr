@@ -1,6 +1,7 @@
 {-# LANGUAGE PatternSynonyms, FlexibleContexts, RecordWildCards #-}
 module TypeChecker where
 
+import Data.Dynamic
 import Data.Either
 import Data.Function
 import Data.List
@@ -147,7 +148,6 @@ check a t = case (a,t) of
        else oops "case branches does not match the data type"
   (VPi a f,Lam x t)  -> do
     var <- getFresh
-    rho <- asks env
     local (addTypeVal (x,a)) $ check (app f var) t
   (VRecordT ts, Record fs) -> do
     checkRecord ts fs
@@ -169,10 +169,6 @@ checkRecord (VBind x a r) ts =
       t' <- checkEval a t
       checkRecord (r t') ts
 
-arrs :: [Val] -> Val -> Val
-arrs [] t = t
-arrs (a:as) t = VPi a $ VLam $ \_ -> arrs as t
-  
 checkEval :: Val -> Ter -> Typing Val
 checkEval a t = do
   checkLogg a t
@@ -213,12 +209,14 @@ inferType t = do
 -- | Infer the type of the argument
 checkInfer :: Ter -> Typing Val
 checkInfer e = case e of
+  Real _ -> return real
+  Prim p -> return $ lkPrimTy p
   Pi a (Lam x b) -> do
     _ <- inferType a
     localM (addType (x,a)) $ inferType b
   RecordT [] -> return VU
   RecordT ((x,a):as) -> do
-    inferType a
+    _ <- inferType a
     localM (addType (x,a)) $ inferType (RecordT as)
   U -> return VU                 -- U : U
   Var n -> do
@@ -246,12 +244,7 @@ checkInfer e = case e of
     localM (addDecls d) $ checkInfer t
   _ -> oops ("checkInfer " ++ show e)
 
-checkInferProj ::
-  String -> -- ^ field to project
-  Val -> -- ^ record value
-  VTele -> -- record type
-  Typing Val
-  
+checkInferProj :: String -> {- ^ field to project-} Val -> {- ^ record value-} VTele -> {- ^ record type-} Typing Val
 checkInferProj l _ VEmpty = oops $ "field not found:" ++ l
 checkInferProj l r (VBind x a rest)
   | x == l = return a

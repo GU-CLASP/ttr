@@ -24,18 +24,13 @@ separator   Decl ";" ;
 Where.    ExpWhere ::= Exp "where" "{" [Decl] "}" ;
 NoWhere.  ExpWhere ::= Exp ;
 
-Zero.     CExp ::= Integer ;
-CVar.     CExp ::= AIdent ;
-CMax.     CExp ::= CExp "\\/" CExp ;
-
-coercions CExp 2 ;
-
+Real.     Exp  ::= Double ;
+PrimOp.   Exp  ::= "primitive" String;
 Let.      Exp  ::= "let" "{" [Decl] "}" "in" Exp ;
 Lam.      Exp  ::= "\\" AIdent [AIdent] "->" Exp ;
 Split.    Exp  ::= "split" "{" [Branch] "}" ;
 Fun.      Exp1 ::= Exp2 "->" Exp1 ;
 Pi.       Exp1 ::= "(" PseudoTDecl ")" "->" Exp1 ;
-CPi.      Exp1 ::= "forall " AIdent [AIdent] "." Exp1 ;
 Record.   Exp1 ::= "[" [PseudoTDecl] "]"  ;
 App.      Exp2 ::= Exp2 Exp3 ;
 Proj.     Exp3 ::= Exp3 "." AIdent ;
@@ -44,7 +39,7 @@ Var.      Exp3 ::= AIdent ;
 U.        Exp3 ::= "U" ;
 coercions Exp 3 ;
 
-separator Exp ",";
+separator Exp "," ;
 
 -- Branches
 Branch.   Branch ::= AIdent [AIdent] "->" ExpWhere ;
@@ -67,3 +62,4 @@ separator nonempty PseudoTDecl ";" ;
 
 position token AIdent ((letter|'\''|'_'|'`')(letter|digit|'\''|'_')*) ;
 terminator AIdent "" ;
+
