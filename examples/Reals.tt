@@ -1,0 +1,22 @@
+module Reals where
+
+Real : U
+Real = primitive "#R"
+
+plus : Real -> Real -> Real
+plus x y = (primitive "+") x y
+
+minus : Real -> Real -> Real
+minus x y = (primitive "-") x y
+
+subtract : Real -> Real -> Real
+subtract x y = minus y x
+
+times : Real -> Real -> Real
+times x y = (primitive "*") x y
+
+dotProd : List Real -> List Real -> Real
+dotProd xs ys = foldr Real Real (zipWith Real Real Real times xs ys) plus 0.0
+
+testReal : Real -> (a : U) -> a -> a -> a
+testReal x a t f = (primitive "positive") x a t f

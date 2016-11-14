@@ -41,14 +41,18 @@ abstract :: String -> [Val] -> Val
 abstract x = VAbstract x
 
 binOp op opName = VLam $ \vx -> VLam $ \vy -> case (vx,vy) of
-  (VPrim (fromDynamic -> Just (x::Double)) x', VPrim (fromDynamic -> Just y) y') ->
+  (VPrim (fromDynamic -> Just (x::Double)) _, VPrim (fromDynamic -> Just y) y') ->
       let z = op x y
       in VPrim (toDyn z) (show z)
   _ -> abstract opName [vx,vy]
 
 lkPrim :: String -> Val
+lkPrim "-" = binOp (-) "-"
 lkPrim "+" = binOp (+) "+"
 lkPrim "*" = binOp (+) "*"
+lkPrim "positive" = VLam $ \x -> VLam $ \ty -> VLam $ \p -> VLam $ \n -> case x of
+  VPrim (fromDynamic -> Just (x::Double)) _ -> if x > 0 then p else n
+  _ -> abstract "positive" [x,ty,p,n]
 lkPrim p = abstract p []
 
 real :: Val
@@ -58,9 +62,10 @@ infixr -->
 (-->) :: Val -> Val -> Val
 a --> b = VPi a $ VLam $ \_ -> b
 lkPrimTy :: String -> Val
+lkPrimTy "-" = real --> real --> real
 lkPrimTy "+" = real --> real --> real
 lkPrimTy "*" = real --> real --> real
-lkPrimTy "=" = real --> real --> VU --> VU --> VU
+lkPrimTy "positive" = real --> VPi VU (VLam $ \ty -> ty --> ty --> ty)
 lkPrimTy "#R" = VU
 lkPrimTy p = error ("No type for primitive: " ++ show p)
 
