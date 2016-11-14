@@ -147,7 +147,7 @@ imports v st@(notok,loaded,mods) f
             return ([],[],[])
           Ok mod@(Module id imp decls) ->
             let name    = unAIdent id
-                imp_cub = [prefix ++ unAIdent i ++ ".cub" | Import i <- imp]
+                imp_cub = [prefix ++ unAIdent i ++ ".tt" | Import i <- imp]
             in do
               when (name /= dropExtension (takeFileName f)) $
                 error $ "Module name mismatch " ++ show (f,name)

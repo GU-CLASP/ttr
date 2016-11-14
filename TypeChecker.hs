@@ -160,6 +160,7 @@ check a t = case (a,t) of
        v <- checkInfer t
        checkConv "inferred type" a v
 
+-- | Check that a record has a given type
 checkRecord :: VTele -> [(String,Ter)] -> Typing ()
 checkRecord VEmpty _ = return () -- other fields are ignored.
 checkRecord (VBind x a r) ts =

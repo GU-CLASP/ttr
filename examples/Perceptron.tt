@@ -1,0 +1,27 @@
+module Perceptron where
+
+import Lists
+import Reals
+
+Ind : U
+Ind = primitive "#Ind"
+
+Bot : U
+data Bot =
+
+Top : U
+data Top = top
+
+
+kappa : [w : List Real;
+         t : Real;
+         f : List Real -> U]
+kappa = (w = w, t = t, f = f)
+  where w : List Real
+        w = cons 0.800 (cons 0.010 nil)
+        t : Real
+        t = 0.090
+        f : List Real -> U
+        f v = testReal (subtract t (dotProd w v)) U Top Bot
+
+
