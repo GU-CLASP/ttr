@@ -23,5 +23,3 @@ kappa = (w = w, t = t, f = f)
         t = 0.090
         f : List Real -> U
         f v = testReal (subtract t (dotProd w v)) U Top Bot
-
-
