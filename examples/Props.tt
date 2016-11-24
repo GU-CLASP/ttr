@@ -1,0 +1,26 @@
+module Props where
+
+Bot : U  -- do not move this type (at all!) otherwise it won't be found by primops.
+data Bot =
+
+Top : U
+data Top = top
+
+Dec : U -> U
+data Dec T = yes (p : T)
+           | no (q : T -> Bot)
+
+Decidable : (T : U) -> (P : T -> U) -> U
+Decidable T P = (x : T) -> Dec (P x)
+
+Class : U
+Class = [ P : U ; q : P ]
+
+Classifiable : U -> U
+Classifiable S = (s : S) -> Class
+
+decToClass : (T : U) -> Dec T -> Class
+decToClass T =
+   split
+      yes p -> (P = T, q = p)
+      no  q -> (P = T -> Bot, q = q)

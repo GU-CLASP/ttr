@@ -5,9 +5,9 @@
 module Eval where
 
 import TT
-import Control.Applicative
 import Data.Monoid hiding (Sum)
 import Data.Dynamic
+import Prelude hiding (pi)
 
 look :: Ident -> Env -> (Binder, Val)
 look x (Pair rho (n@(y,_l),u))
@@ -16,14 +16,14 @@ look x (Pair rho (n@(y,_l),u))
 look x r@(PDef es r1) = case lookupIdent x es of
   Just (y,t)  -> (y,eval r t)
   Nothing     -> look x r1
-
+look _ Empty = error "panic: variable not found in env"
 
 eval :: Env -> Ter -> Val
 eval _ U               = VU
 eval e (App r s)       = app (eval e r) (eval e s)
 eval e (Var i)         = snd (look i e)
 eval e (Pi a b)        = VPi (eval e a) (eval e b)
--- eval e (Lam is x t)    = Ter (Lam is x t) e -- stop at lambdas
+-- eval e (Lam x t)    = Ter (Lam x t) e -- stop at lambdas
 eval e (Lam x t)       = VLam $ \x' -> eval (Pair e (x,x')) t
 eval e (RecordT bs)      = VRecordT $ evalTele e bs
 eval e (Record fs)     = VRecord [(l,eval e x) | (l,x) <- fs]
@@ -34,14 +34,17 @@ eval e (Split pr alts) = Ter (Split pr alts) e
 eval e (Sum pr ntss)   = Ter (Sum pr ntss) e
 eval _ (Undef _)       = error "undefined (2)"
 eval _ (Real r)        = VPrim (toDyn r) (show r)
-eval _ (Prim ('#':nm)) = VAbstract nm []
+eval _ (Prim ('#':nm)) = VAbstract nm
 eval _ (Prim nm)       = lkPrim nm
 
 abstract :: String -> [Val] -> Val
-abstract x = VAbstract x
+abstract x = foldl app (VAbstract x)
 
+binOp :: forall a a1.
+               (Typeable a1, Typeable a, Show a1) =>
+               (Double -> a -> a1) -> String -> Val
 binOp op opName = VLam $ \vx -> VLam $ \vy -> case (vx,vy) of
-  (VPrim (fromDynamic -> Just (x::Double)) _, VPrim (fromDynamic -> Just y) y') ->
+  (VPrim (fromDynamic -> Just (x::Double)) _, VPrim (fromDynamic -> Just y) _) ->
       let z = op x y
       in VPrim (toDyn z) (show z)
   _ -> abstract opName [vx,vy]
@@ -50,23 +53,41 @@ lkPrim :: String -> Val
 lkPrim "-" = binOp (-) "-"
 lkPrim "+" = binOp (+) "+"
 lkPrim "*" = binOp (+) "*"
-lkPrim "positive" = VLam $ \x -> VLam $ \ty -> VLam $ \p -> VLam $ \n -> case x of
-  VPrim (fromDynamic -> Just (x::Double)) _ -> if x > 0 then p else n
-  _ -> abstract "positive" [x,ty,p,n]
+lkPrim "positive?" = VLam $ \xi ->
+                        VLam $ \ty ->
+                        VLam $ \true ->
+                        VLam $ \false -> case xi of
+  VPrim (fromDynamic -> Just (x::Double)) _ -> if x >= 0
+                                               then true `app` (abstract "positive!" [xi])
+                                               else false `app` VLam (\q -> -- the type system prevents getting here.
+                                                             abstract "impossible" [q,(abstract "negative!" [xi])])
+  _ -> abstract "positive?" [xi,ty,true,false]
 lkPrim p = abstract p []
 
 real :: Val
-real = VAbstract "R" []
+real = VAbstract "R"
+
+positive :: Val -> Val
+positive v = abstract ">0" [v]
+
+bot :: Val
+bot = Ter (Sum ("Bot",Loc "Props" (4,6)) []) Empty
 
 infixr -->
 (-->) :: Val -> Val -> Val
-a --> b = VPi a $ VLam $ \_ -> b
+a --> b = pi a $ \_ -> b
+pi :: Val -> (Val -> Val) -> Val
+pi a f = VPi a $ VLam f
 lkPrimTy :: String -> Val
 lkPrimTy "-" = real --> real --> real
 lkPrimTy "+" = real --> real --> real
 lkPrimTy "*" = real --> real --> real
-lkPrimTy "positive" = real --> VPi VU (VLam $ \ty -> ty --> ty --> ty)
+lkPrimTy "positive?" = pi real $ \x ->
+                       pi VU   $ \ty ->
+                       (positive x --> ty) --> ((positive x --> bot) --> ty) --> ty
 lkPrimTy "#R" = VU
+lkPrimTy "#>0" = real --> VU
+lkPrimTy "#Ind" = VU
 lkPrimTy p = error ("No type for primitive: " ++ show p)
 
 evalTele :: Env -> Tele -> VTele
@@ -141,7 +162,7 @@ conv k (VRecord fs) (VRecord fs') = convFields k fs fs'
 conv k (VApp u v)   (VApp u' v')   = conv k u u' <> conv k v v'
 conv k (VSplit u v) (VSplit u' v') = conv k u u' <> conv k v v'
 conv _ (VVar x)     (VVar x')      = x `equal` x'
-conv k (VAbstract n us) (VAbstract n' us') = n `equal` n' <> convs k us us'
+conv _ (VAbstract n) (VAbstract n') = n `equal` n'
 conv _ (VPrim _ _) (VPrim _ _) = Nothing
 conv _ x              x'           = different x x'
 

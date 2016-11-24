@@ -1,7 +1,8 @@
 module Rec where
 
 Sigma : (A : U) -> (B : A -> U) -> U
-Sigma A B = [ fst : A ; snd : B fst]
+Sigma A B = [fst : A ;
+             snd : B fst]
 
 
 first : (A : U) -> (B : A -> U) -> Sigma A B -> A

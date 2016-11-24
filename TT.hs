@@ -96,13 +96,14 @@ data Val = VU
          | VProj String Val
          | VLam (Val -> Val)
          | VPrim Dynamic String
-         | VAbstract String [Val]
+         | VAbstract String
   -- deriving Eq
 
 mkVar :: Int -> Val
 mkVar k = VVar ('X' : show k)
 
 isNeutral :: Val -> Bool
+isNeutral (VAbstract _) = True
 isNeutral (VApp u _)   = isNeutral u
 isNeutral (VSplit _ v) = isNeutral v
 isNeutral (VVar _)     = True
@@ -213,7 +214,7 @@ showVal t0 = case t0 of
     s <- getSupply
     "\\" <> return s <> " -> " <+> showVal (f $ VVar s)
   (VPrim _ nm) -> return nm
-  (VAbstract nm as) -> return nm <> "(" <> svs as <> ")"
+  (VAbstract nm) -> return ('#':nm)
  where sv = showVal
        sv1 = showVal1
        svs = showVals

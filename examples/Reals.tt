@@ -1,4 +1,6 @@
 module Reals where
+import Lists
+import Props
 
 Real : U
 Real = primitive "#R"
@@ -18,5 +20,8 @@ times x y = (primitive "*") x y
 dotProd : List Real -> List Real -> Real
 dotProd xs ys = foldr Real Real (zipWith Real Real Real times xs ys) plus 0.0
 
-testReal : Real -> (a : U) -> a -> a -> a
-testReal x a t f = (primitive "positive") x a t f
+Positive : Real -> U
+Positive = primitive "#>0"
+
+decidePositivity : (x : Real) -> Dec (Positive x)
+decidePositivity x = (primitive "positive?") x (Dec (Positive x)) yes no
