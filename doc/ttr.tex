@@ -1,0 +1,126 @@
+% -*- latex -*-
+\documentclass[11pt]{article}
+\usepackage[backend=biber,citestyle=authoryear,style=alphabetic]{biblatex}
+
+% \bibliography{PaperTools/bibtex/jp.bib}
+\usepackage{graphicx}
+\usepackage{grffile}
+\usepackage{longtable}
+\usepackage{wrapfig}
+\usepackage{rotating}
+\usepackage[normalem]{ulem}
+\usepackage{amsmath}
+\usepackage{amsthm}
+\usepackage{textcomp}
+\usepackage{amssymb}
+\usepackage{capt-of}
+\usepackage[dvipsnames]{xcolor}
+\usepackage{hyperref}
+\hypersetup{
+    colorlinks,
+    linkcolor={red!50!black},
+    citecolor={blue!50!black},
+    urlcolor={blue!80!black}
+  }
+\usepackage{mathpartir}
+\usepackage{fontspec}
+\usepackage{unicode-math}
+\usepackage[plain]{fancyref}
+\def\frefsecname{Section}
+\def\freffigname{Figure}
+\usepackage[colorinlistoftodos,prependcaption,textsize=tiny]{todonotes}
+\usepackage{xargs}
+\newcommandx{\unsure}[2][1=]{\todo[linecolor=red,backgroundcolor=red!25,bordercolor=red,#1]{#2}}
+\newcommandx{\info}[2][1=]{\todo[linecolor=OliveGreen,backgroundcolor=OliveGreen!25,bordercolor=OliveGreen,#1]{#2}}
+\newcommandx{\change}[2][1=]{\todo[linecolor=blue,backgroundcolor=blue!25,bordercolor=blue,#1]{#2}}
+\newcommandx{\inconsistent}[2][1=]{\todo[linecolor=blue,backgroundcolor=blue!25,bordercolor=red,#1]{#2}}
+\newcommandx{\improvement}[2][1=]{\todo[linecolor=Plum,backgroundcolor=Plum!25,bordercolor=Plum,#1]{#2}}
+\newcommandx{\resolved}[2][1=]{\todo[linecolor=OliveGreen,backgroundcolor=OliveGreen!25,bordercolor=OliveGreen,#1]{#2}} % use this to mark a resolved question
+\newcommandx{\thiswillnotshow}[2][1=]{\todo[disable,#1]{#2}} % will replace \resolved in the final document
+% Link in bibliography interpreted as hyperlinks.
+\newcommand{\HREF}[2]{\href{#1}{#2}}
+
+\newtheorem{definition}{Definition}
+\newtheorem{lemma}{Lemma}
+
+\author{Jean-Philippe Bernardy}
+\date{\today}
+\title{Draft: a proof-theoretic presentation of TTR.}
+\newcommand\ru[1]{\text{\sc #1}}
+\begin{document}
+
+\begin{mathpar}
+  \ru{→-elim}
+  \inferrule
+  {  Γ ⊢ t : (x:A) → B
+    \\Γ ⊢ u : A}{Γ ⊢ t u : B[u/x] }
+
+  \ru{→-intro}
+  \inferrule
+  {Γ, x:A ⊢ t : B }
+  {Γ ⊢ λx.t : (x:A) → B }
+
+  \ru{rec-form-l}
+  \inferrule
+  {Γ, x:A ⊢ [\vec f] }
+  {Γ ⊢ [x : A; \vec f ]  }
+
+  \ru{rec-form-r}
+  \inferrule
+  { }
+  {Γ ⊢ []  }
+
+  \ru{rec-intro-l}
+  \inferrule
+  { }
+  {Γ ⊢ (\vec f) : [ ]  }
+
+  \ru{rec-intro-r}
+  \inferrule
+  {Γ ⊢ (\vec r) : [\vec f[t/x] ] \\ f=t ∈ \vec r \\ Γ ⊢ t : A  }
+  {Γ ⊢ (\vec r) : [x : A; \vec f ]  }
+
+  \ru{rec-elim}
+  \inferrule
+  {Γ ⊢ t : [\vec f]  \\ Γ ⊢ (t:[\vec f]).x : A}
+  {Γ ⊢ t.x : A  }
+
+  \ru{rec-elim-l}
+  \inferrule
+  { }
+  {Γ ⊢ (t:[x:A; \vec f]).x : A  }
+
+  \ru{rec-elim-r}
+  \inferrule
+  {Γ ⊢ (t:[\vec f [t.y/y]]).x : A   }
+  {Γ ⊢ (t:[y:B; \vec f]).x : A  }
+
+  \ru{conv}
+  \inferrule
+  {Γ ⊢ t : A  \\ A ⊂ B  }
+  {Γ ⊢ t : B  }
+
+
+  \ru{sub-rec-skip}
+  \inferrule
+    {[\vec f] ⊂ [\vec f']}
+    {[x:A;\vec f] ⊂ [\vec f']}
+
+  \ru{sub-rec-cong}
+  \inferrule
+    {[\vec f] ⊂ [\vec f'] \\ A ⊂ A'}
+    {[x:A;\vec f] ⊂ [x:A';\vec f']}
+
+  \ru{sub-→}
+  \inferrule
+    { A' ⊂ A\\B ⊂ B'}
+    {(x:A) → B ⊂ (x:A') → B'}
+
+  \ru{sub-refl}
+  \inferrule
+    { }
+    {A ⊂ A}
+\end{mathpar}
+alternative subtyping rule for records: merge of A and A' equals A.
+% \printbibliography
+\end{document}
