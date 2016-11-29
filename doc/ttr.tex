@@ -39,17 +39,24 @@
 \newcommandx{\thiswillnotshow}[2][1=]{\todo[disable,#1]{#2}} % will replace \resolved in the final document
 % Link in bibliography interpreted as hyperlinks.
 \newcommand{\HREF}[2]{\href{#1}{#2}}
+\newcommand{\istype}{~\text{type}}
 
 \newtheorem{definition}{Definition}
 \newtheorem{lemma}{Lemma}
 
 \author{Jean-Philippe Bernardy}
 \date{\today}
-\title{Draft: a proof-theoretic presentation of TTR.}
+\title{TTR formal system}
 \newcommand\ru[1]{\text{\sc #1}}
 \begin{document}
 
+Typing judgement:
 \begin{mathpar}
+  \ru{→-form}
+  \inferrule
+  {Γ, x:A ⊢ B \istype }
+  {Γ ⊢ (x:A) → B \istype}
+
   \ru{→-elim}
   \inferrule
   {  Γ ⊢ t : (x:A) → B
@@ -62,14 +69,65 @@
 
   \ru{rec-form-l}
   \inferrule
-  {Γ, x:A ⊢ [\vec f] }
-  {Γ ⊢ [x : A; \vec f ]  }
+  {Γ, x:A ⊢ [\vec f] \istype }
+  {Γ ⊢ [x : A; \vec f ] \istype }
 
   \ru{rec-form-r}
   \inferrule
   { }
-  {Γ ⊢ []  }
+  {Γ ⊢ []  \istype }
 
+  \ru{rec-intro-l}
+  \inferrule
+  { }
+  {Γ ⊢ () : [ ]  }
+
+  \ru{rec-intro-r}
+  \inferrule
+  {Γ ⊢ (\vec r) : [\vec f[t/x] ] \\  Γ, \vec f ⊢ t : A  }
+  {Γ ⊢ (\vec r, f=t) : [\vec f, x:A ]  }
+
+  \ru{rec-elim}
+  \inferrule
+  {Γ ⊢ t : [\vec f; x:A] }
+  {Γ ⊢ t.x : A[t.f/f] \\ \text{(*)}  }
+
+  \ru{conv}
+  \inferrule
+  {Γ ⊢ t : A  \\ A ⊂ B  }
+  {Γ ⊢ t : B  }
+
+\end{mathpar}
+
+(*) substitute each of the field names by the corresponding field
+projection in $t$.
+
+Subtyping judgement:
+\begin{mathpar}
+
+  \ru{sub-rec-skip}
+  \inferrule
+    {[\vec f] ⊂ [\vec f']}
+    {[x:A;\vec f] ⊂ [\vec f']}
+
+  \ru{sub-rec-cong}
+  \inferrule
+    {[\vec f] ⊂ [\vec f'] \\ A ⊂ A'}
+    {[x:A;\vec f] ⊂ [x:A';\vec f']}
+
+  \ru{sub-→}
+  \inferrule
+    { A' ⊂ A\\B ⊂ B'}
+    {(x:A) → B ⊂ (x:A') → B'}
+
+  \ru{sub-refl}
+  \inferrule
+    { }
+    {A ⊂ A}
+\end{mathpar}
+
+Algorithmic rules (incomplete)
+\begin{mathpar}
   \ru{rec-intro-l}
   \inferrule
   { }
@@ -94,33 +152,8 @@
   \inferrule
   {Γ ⊢ (t:[\vec f [t.y/y]]).x : A   }
   {Γ ⊢ (t:[y:B; \vec f]).x : A  }
-
-  \ru{conv}
-  \inferrule
-  {Γ ⊢ t : A  \\ A ⊂ B  }
-  {Γ ⊢ t : B  }
-
-
-  \ru{sub-rec-skip}
-  \inferrule
-    {[\vec f] ⊂ [\vec f']}
-    {[x:A;\vec f] ⊂ [\vec f']}
-
-  \ru{sub-rec-cong}
-  \inferrule
-    {[\vec f] ⊂ [\vec f'] \\ A ⊂ A'}
-    {[x:A;\vec f] ⊂ [x:A';\vec f']}
-
-  \ru{sub-→}
-  \inferrule
-    { A' ⊂ A\\B ⊂ B'}
-    {(x:A) → B ⊂ (x:A') → B'}
-
-  \ru{sub-refl}
-  \inferrule
-    { }
-    {A ⊂ A}
 \end{mathpar}
+
 alternative subtyping rule for records: merge of A and A' equals A.
 % \printbibliography
 \end{document}
