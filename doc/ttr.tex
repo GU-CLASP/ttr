@@ -94,7 +94,7 @@ Typing judgement:
 
   \ru{conv}
   \inferrule
-  {Γ ⊢ t : A  \\ A ⊂ B  }
+  {Γ ⊢ t : A  \\ A ⊑ B  }
   {Γ ⊢ t : B  }
 
 \end{mathpar}
@@ -105,28 +105,53 @@ projection in $t$.
 Subtyping judgement:
 \begin{mathpar}
 
+  \ru{sub-top}
+  \inferrule
+    { }
+    {A ⊑ []} % [] has no elimination rule
+
   \ru{sub-rec-skip}
   \inferrule
-    {[\vec f] ⊂ [\vec f']}
-    {[x:A;\vec f] ⊂ [\vec f']}
+    {[\vec f] ⊑ [\vec f']}
+    {[x:A;\vec f] ⊑ [\vec f']}
 
   \ru{sub-rec-cong}
   \inferrule
-    {[\vec f] ⊂ [\vec f'] \\ A ⊂ A'}
-    {[x:A;\vec f] ⊂ [x:A';\vec f']}
+    {[\vec f] ⊑ [\vec f'] \\ A ⊑ A'}
+    {[x:A;\vec f] ⊑ [x:A';\vec f']}
 
   \ru{sub-→}
   \inferrule
-    { A' ⊂ A\\B ⊂ B'}
-    {(x:A) → B ⊂ (x:A') → B'}
+    { A' ⊑ A\\B ⊑ B'}
+    {(x:A) → B ⊑ (x:A') → B'}
 
   \ru{sub-refl}
   \inferrule
     { }
-    {A ⊂ A}
-\end{mathpar}
+    {A ⊑ A}
 
-Algorithmic rules (incomplete)
+  \ru{sub-bot}
+  \inferrule
+    { }
+    {⊥ ⊑ A} % ⊥ has no introduction rule
+\end{mathpar}
+alternative subtyping rule for records: merge of A and A' equals A.
+
+% Meet and join
+% \begin{align*}
+%   ((x:A) → B) ∧ ((x:A') → B') &= (x:A ∨ A') → (B ∧ B') \\
+%   [\vec f] ∧ [\vec f']                  &= [\vec f ∧ \vec f'] \\
+%   () ∧ \vec f       &= \vec f \\
+%   (x:A,\vec f) ∧ \vec f'       &= x:A,(\vec f ∧ \vec f')  & \text{$x$ ∉ \vec f'} \\
+%   (x:A,\vec f) ∧ (x:A',\vec f')       &= x:(A ∧ A'),(\vec f ∧ \vec f') \\
+%   \{ \vec t \} ∧ \{ \vec t' \} & = \{ \vec t ∩ \vec t' \} \\
+%   A ∧ B & = ⊥ & \text {otherwise}
+% \end{align*}
+
+% (x:A) → B ∨ (x:A') → B' &= (x:A ∧ A') → (B ∨ B') \\
+
+
+Algorithmic (bi-directional) rules (incomplete)
 \begin{mathpar}
   \ru{rec-intro-l}
   \inferrule
@@ -154,6 +179,5 @@ Algorithmic rules (incomplete)
   {Γ ⊢ (t:[y:B; \vec f]).x : A  }
 \end{mathpar}
 
-alternative subtyping rule for records: merge of A and A' equals A.
 % \printbibliography
 \end{document}
