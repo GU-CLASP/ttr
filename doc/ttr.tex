@@ -48,24 +48,55 @@
 \date{\today}
 \title{TTR formal system}
 \newcommand\ru[1]{\text{\sc #1}}
+\newcommand\Type{\mathsf{Type}}
+\newcommand\splt[1]{\mathsf{split} \{ #1 \}}
+\newcommand\fin[1]{\{ #1 \}}
 \begin{document}
 
-Typing judgement:
+Syntax:
+\begin{align*}
+  t,u,A,B & ::=  x \\
+          & ∣~    λx. t \\
+          & ∣~    t u & \text{application} \\
+          & ∣~    (\vec r) & \text{record} \\
+          & ∣~    t.x & \text{projection} \\
+          & ∣~    `x & \text{tag} \\
+          & ∣~    \splt {`x ↦ t, …} \\
+          & ∣~    \Type \\
+          & ∣~    ⊥ \\
+          & ∣~    (x:A) → B \\
+          & ∣~    [ \vec f ] \\
+          & ∣~    \fin{`\vec x }
+\end{align*}
+
+Example types:
+\begin{align*}
+  Σ(x:A)(B[x]) & = [fst : A ; snd : B[fst]] \\
+  A × B & = Σ(\_:A)B \\
+  A + B & = [choice : \fin {`a, `b}; payload : \splt {`a ↦ A; `b ↦ B}]
+\end{align*}
+
+\begin{align*}
+  Γ,Δ & ::=  — \\
+      & ∣ ~  & x:A, Γ
+\end{align*}
+
+Type formation rules:
 \begin{mathpar}
+  \ru{Type-form}
+  \inferrule
+  {Γ }
+  {Γ ⊢ \Type \istype}
+
+  \ru{⊥-form}
+  \inferrule
+  { }
+  {Γ ⊢ ⊥  \istype}
+
   \ru{→-form}
   \inferrule
   {Γ, x:A ⊢ B \istype }
   {Γ ⊢ (x:A) → B \istype}
-
-  \ru{→-elim}
-  \inferrule
-  {  Γ ⊢ t : (x:A) → B
-    \\Γ ⊢ u : A}{Γ ⊢ t u : B[u/x] }
-
-  \ru{→-intro}
-  \inferrule
-  {Γ, x:A ⊢ t : B }
-  {Γ ⊢ λx.t : (x:A) → B }
 
   \ru{rec-form-l}
   \inferrule
@@ -76,6 +107,35 @@ Typing judgement:
   \inferrule
   { }
   {Γ ⊢ []  \istype }
+
+  \ru{fin-form}
+  \inferrule
+  { }
+  {Γ ⊢ \{`\vec x \} \istype }
+
+  \ru{meet-form}
+  \inferrule
+  {Γ ⊢ A \istype \\ Γ ⊢ B \istype }
+  {Γ ⊢ A ∧ B \istype}
+
+  \ru{join-form}
+  \inferrule
+  {Γ ⊢ A \istype \\ Γ ⊢ B \istype }
+  {Γ ⊢ A ∨ B \istype}
+
+\end{mathpar}
+
+Type-checking rules:
+\begin{mathpar}
+  \ru{→-elim}
+  \inferrule
+  {  Γ ⊢ t : (x:A) → B
+    \\Γ ⊢ u : A}{Γ ⊢ t u : B[u/x] }
+
+  \ru{→-intro}
+  \inferrule
+  {Γ, x:A ⊢ t : B }
+  {Γ ⊢ λx.t : (x:A) → B }
 
   \ru{rec-intro-l}
   \inferrule
@@ -92,10 +152,30 @@ Typing judgement:
   {Γ ⊢ t : [\vec f; x:A] }
   {Γ ⊢ t.x : A[t.f/f] \\ \text{(*)}  }
 
+  \ru{fin-intro}
+  \inferrule
+  {  }
+  {Γ ⊢ `x : \fin { ′x }  }
+
+  \ru{fin-elim}
+  \inferrule
+  {Γ ⊢ t_i : A_i  }
+  {Γ ⊢ \splt {`x ↦ t, …} : \fin { ′x, … } → ⋀_i (A_i) }
+
+  \ru{meet-intro}
+  \inferrule
+  {Γ ⊢ t : A  \\ Γ ⊢ t : B }
+  {Γ ⊢ t : A ∧ B }
+
+  \ru{join-intro}
+  \inferrule
+  {Γ ⊢ t : A   }
+  {Γ ⊢ t : A ∨ B }
+
   \ru{conv}
   \inferrule
-  {Γ ⊢ t : A  \\ A ⊑ B  }
-  {Γ ⊢ t : B  }
+  {Γ ⊢ t : A \\ A ⊑ B  }
+  {Γ ⊢ t : B }
 
 \end{mathpar}
 
@@ -125,6 +205,36 @@ Subtyping judgement:
     { A' ⊑ A\\B ⊑ B'}
     {(x:A) → B ⊑ (x:A') → B'}
 
+  \ru{sub-∧-l}
+  \inferrule
+    {A ⊑ A'}
+    {A ∧ B ⊑ A'}
+
+  \ru{sub-∧-r}
+  \inferrule
+    {A ⊑ A' \\ A ⊑ B' }
+    {A ⊑ A' ∧ B'}
+
+  \ru{sub-∨-l}
+  \inferrule
+    {A ⊑ A' \\ B ⊑ A' }
+    {A ∨ B ⊑ A'  }
+
+  \ru{sub-∨-r}
+  \inferrule
+    {A ⊑ A' }
+    {A ⊑ A' ∨ B'  }
+
+  \ru{sub-fin}
+  \inferrule
+    {`\vec x ⊆ {`\vec x'} }
+    {\fin {`\vec x} ⊑ \fin {`\vec x'} }
+
+  \ru{sub-fin}
+  \inferrule
+    {`\vec x ⊆ {`\vec x'} }
+    {\fin {`\vec x} ⊑ \fin {`\vec x'} }
+
   \ru{sub-refl}
   \inferrule
     { }
@@ -134,22 +244,79 @@ Subtyping judgement:
   \inferrule
     { }
     {⊥ ⊑ A} % ⊥ has no introduction rule
-\end{mathpar}
-alternative subtyping rule for records: merge of A and A' equals A.
 
-% Meet and join
+  \ru{sub-lam}
+  \inferrule
+    {u ⊑ t[x/y]}
+    {λx.u ⊑ λy.t }
+
+  \ru{sub-rec}
+  \inferrule
+    {x'_i = x'_j ⟶ t_i ⊑ t'_i}
+    {(x_i = t_i) ⊑ (x'_i = t'_i) }
+
+  \ru{sub-split}
+  \inferrule
+    {\fin x'_i ⊆ \fin x_i \\ x_i = x_j ⟶ t_i ⊑ t'_i}
+    {\splt {x_i ↦ t_i} ⊑ \splt {x'_i ↦ t'_i} }
+  \end{mathpar}
+
+
+  The rule for application would be:
+  \begin{mathpar}
+  \inferrule
+    {t ⊑ t' \\ u⊑u' \\ u'⊑u} 
+    {t u ⊑ t' u' \\ (*)}
+  \end{mathpar}
+
+  because there can be both positive and negative occurences of the
+  argument. (consider t = t' = λx. x → x). And so would be other
+  eliminators. So in the end it's better to have only the reflection
+  rule and drop the rules for eliminators.
+
+  $⊑$ forms a lattice with
+  $∧$ as meet,
+  $∨$ as join,
+  $⊥$ as least element and
+  $[]$ as greatest element.
+
+Evaluation rules:
+\begin{align*}
+  (λx.t) u & = t[u/x]\\
+  (x = t, …).x & = t\\
+  (\splt {x ↦ t, …}) `x & = t
+\end{align*}
+
+% Evaluation rules for meet.
 % \begin{align*}
 %   ((x:A) → B) ∧ ((x:A') → B') &= (x:A ∨ A') → (B ∧ B') \\
 %   [\vec f] ∧ [\vec f']                  &= [\vec f ∧ \vec f'] \\
-%   () ∧ \vec f       &= \vec f \\
-%   (x:A,\vec f) ∧ \vec f'       &= x:A,(\vec f ∧ \vec f')  & \text{$x$ ∉ \vec f'} \\
+%   ─ ∧ \vec f       &= \vec f \\
+%   (x:A,\vec f) ∧ \vec f'       &= x:A,(\vec f ∧ \vec f')  & x ∉ \vec f' \\
 %   (x:A,\vec f) ∧ (x:A',\vec f')       &= x:(A ∧ A'),(\vec f ∧ \vec f') \\
 %   \{ \vec t \} ∧ \{ \vec t' \} & = \{ \vec t ∩ \vec t' \} \\
-%   A ∧ B & = ⊥ & \text {otherwise}
+%   A ∧ A & = A \\
+%   A ∧ B & = ⊥ & \text {otherwise and if neither $A$ or $B$ is neutral.}
 % \end{align*}
 
-% (x:A) → B ∨ (x:A') → B' &= (x:A ∧ A') → (B ∨ B') \\
+% Evaluation rules for join.
+% \begin{align*}
+%   ((x:A) → B) ∨ ((x:A') → B') &= (x:A ∧ A') → (B ∨ B') \\
+%   [\vec f] ∨ [\vec f']                  &= [\vec f ∨ \vec f'] \\
+%   ─ ∨ \vec f       &= ─ \\
+%   (x:A,\vec f) ∨ \vec f'       &= (\vec f ∨ \vec f')  & x ∉ \vec f' \\
+%   (x:A,\vec f) ∨ (x:A',\vec f')       &= x:(A ∨ A'),(\vec f ∨ \vec f') \\
+%   \{ \vec t \} ∨ \{ \vec t' \} & = \{ \vec t ∪ \vec t' \} \\
+%   A ∨ A & = A \\
+%   A ∨ B & = [] & \text {otherwise and if neither $A$ or $B$ is neutral.}
+% \end{align*}
 
+% Perhaps have a parallel execution as the introductor of meet?
+% (t|u) : A ∧ B
+% (t|u) v = (t v|u v)
+% (t|u).x = (t.x|u.x)
+% (λx.t|λx.u) = λx.(t|u)
+% (t|crash) = t
 
 Algorithmic (bi-directional) rules (incomplete)
 \begin{mathpar}
@@ -178,6 +345,8 @@ Algorithmic (bi-directional) rules (incomplete)
   {Γ ⊢ (t:[\vec f [t.y/y]]).x : A   }
   {Γ ⊢ (t:[y:B; \vec f]).x : A  }
 \end{mathpar}
+
+
 
 % \printbibliography
 \end{document}
