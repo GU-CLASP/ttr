@@ -78,14 +78,15 @@ Example types:
 
 \begin{align*}
   Γ,Δ & ::=  — \\
-      & ∣ ~  & x:A, Γ
+      & ∣  x:A, Γ
 \end{align*}
 
-Type formation rules:
+Type formation rules: (we omit well-formedness of contexts for
+concision).
 \begin{mathpar}
   \ru{Type-form}
   \inferrule
-  {Γ }
+  { }
   {Γ ⊢ \Type \istype}
 
   \ru{⊥-form}
@@ -155,12 +156,12 @@ Type-checking rules:
   \ru{fin-intro}
   \inferrule
   {  }
-  {Γ ⊢ `x : \fin { ′x }  }
+  {Γ ⊢ `x : \fin { `x }  }
 
   \ru{fin-elim}
   \inferrule
-  {Γ ⊢ t_i : A_i  }
-  {Γ ⊢ \splt {`x ↦ t, …} : \fin { ′x, … } → ⋀_i (A_i) }
+  {Γ ⊢ t_i : A[x_i]  }
+  {Γ ⊢ \splt {`x_i ↦ t_i, …} : (y : \fin { `x_i, … }) → A[y] }
 
   \ru{meet-intro}
   \inferrule
@@ -237,28 +238,14 @@ Subtyping judgement:
 
   \ru{sub-refl}
   \inferrule
-    { }
-    {A ⊑ A}
+    {A = B}
+    {A ⊑ B}
 
   \ru{sub-bot}
   \inferrule
     { }
     {⊥ ⊑ A} % ⊥ has no introduction rule
 
-  \ru{sub-lam}
-  \inferrule
-    {u ⊑ t[x/y]}
-    {λx.u ⊑ λy.t }
-
-  \ru{sub-rec}
-  \inferrule
-    {x'_i = x'_j ⟶ t_i ⊑ t'_i}
-    {(x_i = t_i) ⊑ (x'_i = t'_i) }
-
-  \ru{sub-split}
-  \inferrule
-    {\fin x'_i ⊆ \fin x_i \\ x_i = x_j ⟶ t_i ⊑ t'_i}
-    {\splt {x_i ↦ t_i} ⊑ \splt {x'_i ↦ t'_i} }
   \end{mathpar}
 
 
@@ -272,7 +259,8 @@ Subtyping judgement:
   because there can be both positive and negative occurences of the
   argument. (consider t = t' = λx. x → x). And so would be other
   eliminators. So in the end it's better to have only the reflection
-  rule and drop the rules for eliminators.
+  rule and drop the rules for eliminators and introductions of
+  non-type rules.
 
   $⊑$ forms a lattice with
   $∧$ as meet,
@@ -287,29 +275,44 @@ Evaluation rules:
   (\splt {x ↦ t, …}) `x & = t
 \end{align*}
 
-% Evaluation rules for meet.
-% \begin{align*}
-%   ((x:A) → B) ∧ ((x:A') → B') &= (x:A ∨ A') → (B ∧ B') \\
-%   [\vec f] ∧ [\vec f']                  &= [\vec f ∧ \vec f'] \\
-%   ─ ∧ \vec f       &= \vec f \\
-%   (x:A,\vec f) ∧ \vec f'       &= x:A,(\vec f ∧ \vec f')  & x ∉ \vec f' \\
-%   (x:A,\vec f) ∧ (x:A',\vec f')       &= x:(A ∧ A'),(\vec f ∧ \vec f') \\
-%   \{ \vec t \} ∧ \{ \vec t' \} & = \{ \vec t ∩ \vec t' \} \\
-%   A ∧ A & = A \\
-%   A ∧ B & = ⊥ & \text {otherwise and if neither $A$ or $B$ is neutral.}
-% \end{align*}
+  % \ru{sub-lam}
+  % \inferrule
+  %   {u ⊑ t[x/y]}
+  %   {λx.u ⊑ λy.t }
 
-% Evaluation rules for join.
-% \begin{align*}
-%   ((x:A) → B) ∨ ((x:A') → B') &= (x:A ∧ A') → (B ∨ B') \\
-%   [\vec f] ∨ [\vec f']                  &= [\vec f ∨ \vec f'] \\
-%   ─ ∨ \vec f       &= ─ \\
-%   (x:A,\vec f) ∨ \vec f'       &= (\vec f ∨ \vec f')  & x ∉ \vec f' \\
-%   (x:A,\vec f) ∨ (x:A',\vec f')       &= x:(A ∨ A'),(\vec f ∨ \vec f') \\
-%   \{ \vec t \} ∨ \{ \vec t' \} & = \{ \vec t ∪ \vec t' \} \\
-%   A ∨ A & = A \\
-%   A ∨ B & = [] & \text {otherwise and if neither $A$ or $B$ is neutral.}
-% \end{align*}
+  % \ru{sub-rec}
+  % \inferrule
+  %   {x'_i = x'_j ⟶ t_i ⊑ t'_i}
+  %   {(x_i = t_i) ⊑ (x'_i = t'_i) }
+
+  % \ru{sub-split}
+  % \inferrule
+  %   {\fin x'_i ⊆ \fin x_i \\ x_i = x_j ⟶ t_i ⊑ t'_i}
+  %   {\splt {x_i ↦ t_i} ⊑ \splt {x'_i ↦ t'_i} }
+
+Evaluation rules for meet.
+\begin{align*}
+  ((x:A) → B) ∧ ((x:A') → B') &= (x:A ∨ A') → (B ∧ B') \\
+  [\vec f] ∧ [\vec f']                  &= [\vec f ∧ \vec f'] \\
+  ─ ∧ \vec f       &= \vec f \\
+  (x:A,\vec f) ∧ \vec f'       &= x:A,(\vec f ∧ \vec f')  & x ∉ \vec f' \\
+  (x:A,\vec f) ∧ (x:A',\vec f')       &= x:(A ∧ A'),(\vec f ∧ \vec f') \\
+  \{ \vec t \} ∧ \{ \vec t' \} & = \{ \vec t ∩ \vec t' \} \\
+  A ∧ A & = A \\
+  A ∧ B & = ⊥ & \text {otherwise and if neither $A$ or $B$ is neutral.}
+\end{align*}
+
+Evaluation rules for join.
+\begin{align*}
+  ((x:A) → B) ∨ ((x:A') → B') &= (x:A ∧ A') → (B ∨ B') \\
+  [\vec f] ∨ [\vec f']                  &= [\vec f ∨ \vec f'] \\
+  ─ ∨ \vec f       &= ─ \\
+  (x:A,\vec f) ∨ \vec f'       &= (\vec f ∨ \vec f')  & x ∉ \vec f' \\
+  (x:A,\vec f) ∨ (x:A',\vec f')       &= x:(A ∨ A'),(\vec f ∨ \vec f') \\
+  \{ \vec t \} ∨ \{ \vec t' \} & = \{ \vec t ∪ \vec t' \} \\
+  A ∨ A & = A \\
+  A ∨ B & = [] & \text {otherwise and if neither $A$ or $B$ is neutral.}
+\end{align*}
 
 % Perhaps have a parallel execution as the introductor of meet?
 % (t|u) : A ∧ B
