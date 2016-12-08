@@ -68,17 +68,16 @@ Syntax:
           & ∣~    [ \vec f ] \\
           & ∣~    \fin{`\vec x }
 \end{align*}
+\begin{align*}
+  Γ,Δ & ::=  — \\
+      & ∣  x:A, Γ
+\end{align*}
 
 Example types:
 \begin{align*}
   Σ(x:A)(B[x]) & = [fst : A ; snd : B[fst]] \\
   A × B & = Σ(\_:A)B \\
   A + B & = [choice : \fin {`a, `b}; payload : \splt {`a ↦ A; `b ↦ B}]
-\end{align*}
-
-\begin{align*}
-  Γ,Δ & ::=  — \\
-      & ∣  x:A, Γ
 \end{align*}
 
 Type formation rules: (we omit well-formedness of contexts for
@@ -163,15 +162,15 @@ Type-checking rules:
   {Γ ⊢ t_i : A[x_i]  }
   {Γ ⊢ \splt {`x_i ↦ t_i, …} : (y : \fin { `x_i, … }) → A[y] }
 
-  \ru{meet-intro}
-  \inferrule
-  {Γ ⊢ t : A  \\ Γ ⊢ t : B }
-  {Γ ⊢ t : A ∧ B }
+  % \ru{meet-intro}
+  % \inferrule
+  % {Γ ⊢ t : A  \\ Γ ⊢ t : B }
+  % {Γ ⊢ t : A ∧ B }
 
-  \ru{join-intro}
-  \inferrule
-  {Γ ⊢ t : A   }
-  {Γ ⊢ t : A ∨ B }
+  % \ru{join-intro}
+  % \inferrule
+  % {Γ ⊢ t : A   }
+  % {Γ ⊢ t : A ∨ B }
 
   \ru{conv}
   \inferrule
@@ -182,6 +181,7 @@ Type-checking rules:
 
 (*) substitute each of the field names by the corresponding field
 projection in $t$.
+(There are no rules for meet and join because the conversion rules takes care of them.)
 
 Subtyping judgement:
 \begin{mathpar}
@@ -290,7 +290,8 @@ Evaluation rules:
   %   {\fin x'_i ⊆ \fin x_i \\ x_i = x_j ⟶ t_i ⊑ t'_i}
   %   {\splt {x_i ↦ t_i} ⊑ \splt {x'_i ↦ t'_i} }
 
-Evaluation rules for meet.
+Evaluation rules for meet and join (they do not change the power of
+the theory, but they can be convenient to have in a prototype system.)
 \begin{align*}
   ((x:A) → B) ∧ ((x:A') → B') &= (x:A ∨ A') → (B ∧ B') \\
   [\vec f] ∧ [\vec f']                  &= [\vec f ∧ \vec f'] \\
@@ -299,11 +300,7 @@ Evaluation rules for meet.
   (x:A,\vec f) ∧ (x:A',\vec f')       &= x:(A ∧ A'),(\vec f ∧ \vec f') \\
   \{ \vec t \} ∧ \{ \vec t' \} & = \{ \vec t ∩ \vec t' \} \\
   A ∧ A & = A \\
-  A ∧ B & = ⊥ & \text {otherwise and if neither $A$ or $B$ is neutral.}
-\end{align*}
-
-Evaluation rules for join.
-\begin{align*}
+  A ∧ B & = ⊥ & \text {otherwise and if neither $A$ or $B$ is neutral.} \\
   ((x:A) → B) ∨ ((x:A') → B') &= (x:A ∧ A') → (B ∨ B') \\
   [\vec f] ∨ [\vec f']                  &= [\vec f ∨ \vec f'] \\
   ─ ∨ \vec f       &= ─ \\
@@ -321,32 +318,64 @@ Evaluation rules for join.
 % (λx.t|λx.u) = λx.(t|u)
 % (t|crash) = t
 
-Algorithmic (bi-directional) rules (incomplete)
+Algorithmic (bi-directional) rules. Checking rules:
+\newcommand\chk{:\!\!?\hspace{2pt}}
+\newcommand\ifr{:!}
 \begin{mathpar}
-  \ru{rec-intro-l}
+  \ru{check-rec-intro-l}
   \inferrule
   { }
-  {Γ ⊢ (\vec f) : [ ]  }
+  {Γ ⊢ (\vec f) \chk [ ]  }
 
-  \ru{rec-intro-r}
+  \ru{check-rec-intro-r}
   \inferrule
-  {Γ ⊢ (\vec r) : [\vec f[t/x] ] \\ f=t ∈ \vec r \\ Γ ⊢ t : A  }
-  {Γ ⊢ (\vec r) : [x : A; \vec f ]  }
+  {Γ ⊢ (\vec r) \chk [\vec f[t/x] ] \\ f=t ∈ \vec r \\ Γ ⊢ t \chk A  }
+  {Γ ⊢ (\vec r) \chk [x : A; \vec f ]  }
 
-  \ru{rec-elim}
+  \ru{check-pi-intro}
   \inferrule
-  {Γ ⊢ t : [\vec f]  \\ Γ ⊢ (t:[\vec f]).x : A}
-  {Γ ⊢ t.x : A  }
+  {Γ, x:A ⊢ t \chk B }
+  {Γ ⊢ λx.t \chk (x:A) → B }
 
-  \ru{rec-elim-l}
+  \ru{check-fin-intro}
   \inferrule
-  { }
-  {Γ ⊢ (t:[x:A; \vec f]).x : A  }
+  {`x = x_i }
+  {Γ ⊢ `x : \fin {x_1 … x_n} }
 
-  \ru{rec-elim-r}
+  \ru{check-conv}
   \inferrule
-  {Γ ⊢ (t:[\vec f [t.y/y]]).x : A   }
-  {Γ ⊢ (t:[y:B; \vec f]).x : A  }
+  {Γ ⊢ t \ifr A \\ A ⊑ B }
+  {Γ ⊢ t \chk B }
+
+\end{mathpar}
+
+Inference rules:
+\begin{mathpar}
+  \ru{inf-pi-elim}
+  \inferrule
+  {Γ ⊢ t \ifr (x:A) → B \\ Γ ⊢ u \chk A }
+  {Γ ⊢ t u \ifr B }
+
+ \ru{inf-rec-elim}
+ \inferrule
+ {Γ ⊢ t \ifr [\vec f]  \\ Γ ⊢ (t:[\vec f]).x \ifr A}
+ {Γ ⊢ t.x \ifr A  }
+
+ \ru{inf-rec-elim-l}
+ \inferrule
+ { }
+ {Γ ⊢ (t:[x:A; \vec f]).x \ifr A  }
+
+ \ru{inf-rec-elim-r}
+ \inferrule
+ {Γ ⊢ (t:[\vec f [t.y/y]]).x \ifr A   }
+ {Γ ⊢ (t:[y:B; \vec f]).x \ifr A  }
+
+ \ru{inf-fin-elim}
+ \inferrule
+  {Γ ⊢ t_i \ifr A_i  }
+  {Γ ⊢ \splt {`x_i ↦ t_i, …} \ifr (y : \fin { `x_i, … }) → ⋀_i A_i[y/`x_i] }
+
 \end{mathpar}
 
 
