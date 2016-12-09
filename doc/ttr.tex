@@ -40,11 +40,11 @@
 \newcommandx{\thiswillnotshow}[2][1=]{\todo[disable,#1]{#2}} % will replace \resolved in the final document
 % Link in bibliography interpreted as hyperlinks.
 \newcommand{\HREF}[2]{\href{#1}{#2}}
-\newcommand{\istype}{~\text{type}}
+\newcommand{\istype}{: \Type}
 
 \newtheorem{definition}{Definition}
 \newtheorem{lemma}{Lemma}
-
+\newtheorem{theorem}{Theorem}
 \author{Jean-Philippe Bernardy}
 \date{\today}
 \title{TTR formal system}
@@ -59,14 +59,14 @@ Syntax:
   t,u,A,B & ::=  x \\
           & ∣~    λx. t \\
           & ∣~    t u & \text{application} \\
-          & ∣~    (\vec r) & \text{record} \\
-          & ∣~    t.x & \text{projection} \\
-          & ∣~    `x & \text{tag} \\
-          & ∣~    \splt {`x ↦ t, …} \\
+          & ∣~    (l_i = t_i) & \text{record} \\
+          & ∣~    t.l & \text{projection} \\
+          & ∣~    `l & \text{tag} \\
+          & ∣~    \splt {`l_i ↦ t_i, …} \\
           & ∣~    \Type \\
           & ∣~    ⊥ \\
           & ∣~    (x:A) → B \\
-          & ∣~    [ \vec f ] \\
+          & ∣~    [ l_i : t_i ] \\
           & ∣~    \fin{`\vec x } \\
           & ∣~    A ∧ B ~|~ A ∨ B 
 \end{align*}
@@ -79,11 +79,11 @@ Example types:
 \begin{align*}
   Σ(x:A)(B[x]) & = [fst : A ; snd : B[fst]] \\
   A × B & = Σ(\_:A)B \\
+  A → B & = (\_:A) → B \\
   A + B & = [choice : \fin {`a, `b}; payload : \splt {`a ↦ A; `b ↦ B}]
 \end{align*}
 
-\subsection*{Type formation: $Γ ⊢ A \istype$}
-(we omit well-formedness of contexts for concision)
+\subsection*{Type checking: $Γ ⊢ t : A$}
 \begin{mathpar}
   \ru{type-form}
   \inferrule
@@ -97,13 +97,13 @@ Example types:
 
   \ru{$→$-form}
   \inferrule
-  {Γ, x:A ⊢ B \istype }
+  {Γ ⊢ A \istype \\ Γ, x:A ⊢ B \istype }
   {Γ ⊢ (x:A) → B \istype}
 
   \ru{rec-form-l}
   \inferrule
-  {Γ, x:A ⊢ [\vec f] \istype }
-  {Γ ⊢ [x : A; \vec f ] \istype }
+  {Γ ⊢ A \istype \\ Γ, x:A ⊢ [l_1 : A_1[x] … l_n : A_n[x]] \istype }
+  {Γ ⊢ [l : A; l_1 : A_1[l] … l_n : A_n[l] ] \istype }
 
   \ru{rec-form-r}
   \inferrule
@@ -125,20 +125,14 @@ Example types:
   {Γ ⊢ A \istype \\ Γ ⊢ B \istype }
   {Γ ⊢ A ∨ B \istype}
 
-  \ru{form-by-elim}
-  \inferrule
-  {Γ ⊢ A : \Type }
-  {Γ ⊢ A \istype}
-
 \end{mathpar}
 
-\subsection*{Type checking: $Γ ⊢ t : A$}
-Type-checking rules:
 \begin{mathpar}
-  \ru{check-type}
+
+  \ru{var}
   \inferrule
-  {Γ ⊢ A \istype }
-  {Γ ⊢ A : \Type }
+  {x : A ∈ Γ }
+  {Γ ⊢ x : A }
 
   \ru{$→$-elim}
   \inferrule
@@ -157,23 +151,23 @@ Type-checking rules:
 
   \ru{rec-intro-r}
   \inferrule
-  {Γ ⊢ (\vec r) : [\vec f[t/x] ] \\  Γ, \vec f ⊢ t : A  }
-  {Γ ⊢ (\vec r, f=t) : [\vec f, x:A ]  }
+  {Γ, \vec f ⊢ t : A \\ Γ ⊢ (k_1=t_1 …  k_m=t_m) : [l_1:A_1[t/l] … l_n:A_n[t/l] ]   }
+  {Γ ⊢ (l_0=t, k_1=t_1 … k_m=t_m) : [l_0:A_0 ; l_1:A_1 … l_n:A_n  ]  }
 
   \ru{rec-elim}
   \inferrule
-  {Γ ⊢ t : [\vec f; x:A] }
-  {Γ ⊢ t.x : A[t.f/f] \\ \text{(*)}  }
+  {Γ ⊢ t : [l_0 : A_0; …; l_{n+1} : A_{n+1} ] }
+  {Γ ⊢ t.l_{n+1} : A_{n+1}[t.l_0/l_0 … t.l_n/l_n]   }
 
   \ru{fin-intro}
   \inferrule
   {  }
-  {Γ ⊢ `x : \fin { `x }  }
+  {Γ ⊢~  `l : \fin { `l }  }
 
   \ru{fin-elim}
   \inferrule
-  {Γ ⊢ t_i : A[x_i]  }
-  {Γ ⊢ \splt {`x_i ↦ t_i, …} : (y : \fin { `x_i, … }) → A[y] }
+  {Γ ⊢ t_i : A[l_i]  }
+  {Γ ⊢ \splt {`l_0 ↦ t_0, …`l_n ↦ t_n} : (x : \fin { `l_i, … }) → A[x] }
 
   % \ru{meet-intro}
   % \inferrule
@@ -192,8 +186,6 @@ Type-checking rules:
 
 \end{mathpar}
 
-(*) substitute each of the field names by the corresponding field
-projection in $t$.
 (There are no rules for meet and join because the conversion rules takes care of them.)
 
 \subsection*{Subtyping: $A ⊑ B$}
@@ -207,13 +199,13 @@ projection in $t$.
 
   \ru{sub-rec-skip}
   \inferrule
-    {[\vec f] ⊑ [\vec f']}
-    {[x:A;\vec f] ⊑ [\vec f']}
+    {[l_1:A_1 …  l_n:A_n] ⊑ [k_1:B_1 …  k_n:B_n]}
+    {[l_0:A_0; l_1:A_1 …  l_n:A_n] ⊑ [k_1:B_1 …  k_n:B_n]}
 
   \ru{sub-rec-cong}
   \inferrule
-    {[\vec f] ⊑ [\vec f'] \\ A ⊑ A'}
-    {[x:A;\vec f] ⊑ [x:A';\vec f']}
+    {A_0 ⊑ B_0 \\ [l_1:A_1 …  l_n:A_n] ⊑ [k_1:B_1 …  k_n:B_n]}
+    {[l_0:A_0; l_1:A_1 …  l_n:A_n] ⊑ [k_0:B_0;k_1:B_1 …  k_n:B_n]}
 
   \ru{sub-$→$}
   \inferrule
@@ -242,12 +234,12 @@ projection in $t$.
 
   \ru{sub-fin}
   \inferrule
-    {`\vec x ⊆ {`\vec y'} }
-    {\fin {`\vec x} ⊑ \fin {`\vec y'} }
+    {\fin {`l_0 … `l_n} ⊆ \fin {`k_0 … `k_n} }
+    {\fin {`l_0 … `l_n} ⊑ \fin {`k_0 … `k_n} }
 
   \ru{sub-refl}
   \inferrule
-    {A = B}
+    {A ⟶ B}
     {A ⊑ B}
 
   \ru{sub-bot}
@@ -258,18 +250,18 @@ projection in $t$.
   \end{mathpar}
 
 
-  The rule for application would be:
-  \begin{mathpar}
-  \inferrule
-    {t ⊑ t' \\ u⊑u' \\ u'⊑u} 
-    {t u ⊑ t' u' \\ (*)}
-  \end{mathpar}
+  % The rule for application would be:
+  % \begin{mathpar}
+  % \inferrule
+  %   {t ⊑ t' \\ u⊑u' \\ u'⊑u} 
+  %   {t u ⊑ t' u' \\ (*)}
+  % \end{mathpar}
 
-  because there can be both positive and negative occurences of the
-  argument. (consider $t = t' = λx. x → x$). And so would be other
-  eliminators. So in the end it's better to have only the reflection
-  rule and drop the rules for eliminators and introductions of
-  non-type rules.
+  % because there can be both positive and negative occurences of the
+  % argument. (consider $t = t' = λx. x → x$). And so would be other
+  % eliminators. So in the end it's better to have only the reflection
+  % rule and drop the rules for eliminators and introductions of
+  % non-type rules.
 
   $⊑$ forms a lattice with
   $∧$ as meet,
@@ -277,15 +269,40 @@ projection in $t$.
   $⊥$ as least element and
   $[]$ as greatest element.
 
-\subsection*{Convertibility: $t = u$}
+\subsection*{Convertibility: $t ⟶ u$}
 
-The convertibility relation $(=)$ is the smallest transitive
-  reflexive congruence containing the following equalities.
-\begin{align*}
-  (λx.t) u & = t[u/x]\\
-  (x = t, …).x & = t\\
-  (\splt {x ↦ t, …}) `x & = t \\
-\end{align*}
+The convertibility relation is the smallest transitive
+reflexive congruence generated by the following rules.
+
+\begin{mathpar}
+  \ru{$β$}\inferrule
+  {t ⟶ t' \\ u ⟶ u'}
+  {(λx.t) u ⟶ t'[u'/x]}
+
+  \ru{$ρ$}\inferrule
+  {t ⟶ (…, l = u, …) \\ u ⟶ u'}
+  {t.l ⟶ u'}
+
+  \ru{$σ$}\inferrule
+  {t ⟶ \splt {x ↦ u, …} \\ u ⟶ u'}
+  {t `x = u'}
+
+  \ru{$μ$l}\inferrule
+  {A ⟶ C \\ B ⟶ C}
+  {A ∨ B ⟶ C}
+
+  \ru{$ν$l}\inferrule
+  {A ⟶ C \\ B ⟶ C}
+  {A ∧ B ⟶ C}
+
+  \ru{$μ$r}\inferrule
+  {C ⟶ A \\ C ⟶ B}
+  {C ⟶ A ∨ B}
+
+  \ru{$ν$r}\inferrule
+  {C ⟶ A \\ C ⟶ B}
+  {C ⟶ A ∧ B }
+\end{mathpar}
 
 
   % \ru{sub-lam}
@@ -303,29 +320,29 @@ The convertibility relation $(=)$ is the smallest transitive
   %   {\fin x'_i ⊆ \fin x_i \\ x_i = x_j ⟶ t_i ⊑ t'_i}
   %   {\splt {x_i ↦ t_i} ⊑ \splt {x'_i ↦ t'_i} }
 
-Conversion rules for meet and join (alternatively add $x ⊑ y$ and
-$y ⊑ x$ implies $x = y$).
-\begin{align*}
-  ((x:A) → B) ∧ ((x:A') → B') &= (x:A ∨ A') → (B ∧ B') \\
-  [\vec f] ∧ [\vec f']                  &= [\vec f ∧ \vec f'] \\
-  ─ ∧ \vec f       &= \vec f \\
-  (x:A,\vec f) ∧ \vec f'       &= x:A,(\vec f ∧ \vec f')  & x ∉ \vec f' \\
-  (x:A,\vec f) ∧ (x:A',\vec f')       &= x:(A ∧ A'),(\vec f ∧ \vec f') \\
-  \{ \vec t \} ∧ \{ \vec t' \} & = \{ \vec t ∩ \vec t' \} \\
-  A ∧ A & = A \\
-  A ∧ B & = ⊥ & \text {otherwise and if neither $A$ or $B$ is neutral.} \\
-\end{align*}
+% Conversion rules for meet and join (alternatively add $x ⊑ y$ and
+% $y ⊑ x$ implies $x = y$).
+% \begin{align*}
+%   ((x:A) → B) ∧ ((x:A') → B') &= (x:A ∨ A') → (B ∧ B') \\
+%   [\vec f] ∧ [\vec f']                  &= [\vec f ∧ \vec f'] \\
+%   ─ ∧ \vec f       &= \vec f \\
+%   (x:A,\vec f) ∧ \vec f'       &= x:A,(\vec f ∧ \vec f')  & x ∉ \vec f' \\
+%   (x:A,\vec f) ∧ (x:A',\vec f')       &= x:(A ∧ A'),(\vec f ∧ \vec f') \\
+%   \{ \vec t \} ∧ \{ \vec t' \} & = \{ \vec t ∩ \vec t' \} \\
+%   A ∧ A & = A \\
+%   A ∧ B & = ⊥ & \text {otherwise and if neither $A$ or $B$ is neutral.} \\
+% \end{align*}
 
-\begin{align*}
-  ((x:A) → B) ∨ ((x:A') → B') &= (x:A ∧ A') → (B ∨ B') \\
-  [\vec f] ∨ [\vec f']                  &= [\vec f ∨ \vec f'] \\
-  ─ ∨ \vec f       &= ─ \\
-  (x:A,\vec f) ∨ \vec f'       &= (\vec f ∨ \vec f')  & x ∉ \vec f' \\
-  (x:A,\vec f) ∨ (x:A',\vec f')       &= x:(A ∨ A'),(\vec f ∨ \vec f') \\
-  \{ \vec t \} ∨ \{ \vec t' \} & = \{ \vec t ∪ \vec t' \} \\
-  A ∨ A & = A \\
-  A ∨ B & = [] & \text {otherwise and if neither $A$ or $B$ is neutral.}
-\end{align*}
+% \begin{align*}
+%   ((x:A) → B) ∨ ((x:A') → B') &= (x:A ∧ A') → (B ∨ B') \\
+%   [\vec f] ∨ [\vec f']                  &= [\vec f ∨ \vec f'] \\
+%   ─ ∨ \vec f       &= ─ \\
+%   (x:A,\vec f) ∨ \vec f'       &= (\vec f ∨ \vec f')  & x ∉ \vec f' \\
+%   (x:A,\vec f) ∨ (x:A',\vec f')       &= x:(A ∨ A'),(\vec f ∨ \vec f') \\
+%   \{ \vec t \} ∨ \{ \vec t' \} & = \{ \vec t ∪ \vec t' \} \\
+%   A ∨ A & = A \\
+%   A ∨ B & = [] & \text {otherwise and if neither $A$ or $B$ is neutral.}
+% \end{align*}
 
 % Perhaps have a parallel execution as the introductor of meet?
 % (t|u) : A ∧ B
@@ -400,8 +417,57 @@ Inference rules:
   {Γ ⊢ t_i \ifr A_i  }
   {Γ ⊢ \splt {`x_i ↦ t_i, …} \ifr (y : \fin { `x_i, … }) → ⋀_i A_i[y/`x_i] }
 
+  \ru{inf-var}
+  \inferrule
+  {x : A ∈ Γ }
+  {Γ ⊢ x \ifr A }
 \end{mathpar}
 
+\begin{theorem}
+  The relations $Γ ⊢ t \chk A$ and  $Γ ⊢ t \ifr A$  are decidable.
+\end{theorem}
+\begin{proof}
+  The pre relations are structural over the proof terms. (Except for
+  the record checking rule; but then the record types gets smaller in
+  the local induction.)
+
+  FIXME: the equality check is problematic to due to beta
+  reduction. This is in fact a quite hairy issue.
+\end{proof}
+\subsection*{Elaboration}
+
+\newcommand\trp[1]{\left(#1\right)^+}
+\newcommand\trn[1]{\left(#1\right)^-}
+
+\begin{definition}[Elaboration of proofs]
+  The proofs are translated as follows:
+  \begin{align*}
+    \trp{x} & = x \\
+    \trp{t u} & = \trp t \trn u \\
+    \trp{t.l} & = \trn t.l \\
+    \trp{u} & = (\trn u : T)  & \text {otherwise} \\
+    \trn{λx.t} & = (λx. \trn t) \\
+    \trn{(l_0 = t_0, … , l_n = t_n )} & = {(l_0 = \trn t_0, … , l_n = \trn t_n )} \\
+    \trn{t} & = \trp{t} & \text {otherwise} \\
+  \end{align*}
+\end{definition}
+
+\begin{theorem}
+  \begin{itemize}
+  \item if $Γ ⊢ t : A$ then $Γ ⊢ \trn t \chk A$.
+  \item if $Γ ⊢ t : A$ then $Γ ⊢ \trp t \ifr B$ and $B ⊑ A$.
+  \end{itemize}
+\end{theorem}
+\begin{proof}
+  By induction on the proof term.
+\end{proof}
+
+\begin{theorem}
+  if $Γ ⊢ t \chk A$ then $Γ ⊢ FIXME  t : A$.
+\end{theorem}
+\begin{proof}
+  (TODO: erase the type annotations)
+\end{proof}
 
 
 % \printbibliography
