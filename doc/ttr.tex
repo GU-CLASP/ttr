@@ -25,6 +25,7 @@
 \usepackage{mathpartir}
 \usepackage{fontspec}
 \usepackage{unicode-math}
+\usepackage[margin=1.5cm]{geometry}
 \usepackage[plain]{fancyref}
 \def\frefsecname{Section}
 \def\freffigname{Figure}
@@ -66,7 +67,8 @@ Syntax:
           & ∣~    ⊥ \\
           & ∣~    (x:A) → B \\
           & ∣~    [ \vec f ] \\
-          & ∣~    \fin{`\vec x }
+          & ∣~    \fin{`\vec x } \\
+          & ∣~    A ∧ B ~|~ A ∨ B 
 \end{align*}
 \begin{align*}
   Γ,Δ & ::=  — \\
@@ -80,20 +82,20 @@ Example types:
   A + B & = [choice : \fin {`a, `b}; payload : \splt {`a ↦ A; `b ↦ B}]
 \end{align*}
 
-Type formation rules: (we omit well-formedness of contexts for
-concision).
+\subsection*{Type formation: $Γ ⊢ A \istype$}
+(we omit well-formedness of contexts for concision)
 \begin{mathpar}
-  \ru{Type-form}
+  \ru{type-form}
   \inferrule
   { }
   {Γ ⊢ \Type \istype}
 
-  \ru{⊥-form}
+  \ru{$⊥$-form}
   \inferrule
   { }
   {Γ ⊢ ⊥  \istype}
 
-  \ru{→-form}
+  \ru{$→$-form}
   \inferrule
   {Γ, x:A ⊢ B \istype }
   {Γ ⊢ (x:A) → B \istype}
@@ -123,16 +125,27 @@ concision).
   {Γ ⊢ A \istype \\ Γ ⊢ B \istype }
   {Γ ⊢ A ∨ B \istype}
 
+  \ru{form-by-elim}
+  \inferrule
+  {Γ ⊢ A : \Type }
+  {Γ ⊢ A \istype}
+
 \end{mathpar}
 
+\subsection*{Type checking: $Γ ⊢ t : A$}
 Type-checking rules:
 \begin{mathpar}
-  \ru{→-elim}
+  \ru{check-type}
+  \inferrule
+  {Γ ⊢ A \istype }
+  {Γ ⊢ A : \Type }
+
+  \ru{$→$-elim}
   \inferrule
   {  Γ ⊢ t : (x:A) → B
     \\Γ ⊢ u : A}{Γ ⊢ t u : B[u/x] }
 
-  \ru{→-intro}
+  \ru{$→$-intro}
   \inferrule
   {Γ, x:A ⊢ t : B }
   {Γ ⊢ λx.t : (x:A) → B }
@@ -172,7 +185,7 @@ Type-checking rules:
   % {Γ ⊢ t : A   }
   % {Γ ⊢ t : A ∨ B }
 
-  \ru{conv}
+  \ru{sub}
   \inferrule
   {Γ ⊢ t : A \\ A ⊑ B  }
   {Γ ⊢ t : B }
@@ -183,7 +196,8 @@ Type-checking rules:
 projection in $t$.
 (There are no rules for meet and join because the conversion rules takes care of them.)
 
-Subtyping judgement:
+\subsection*{Subtyping: $A ⊑ B$}
+
 \begin{mathpar}
 
   \ru{sub-top}
@@ -201,40 +215,35 @@ Subtyping judgement:
     {[\vec f] ⊑ [\vec f'] \\ A ⊑ A'}
     {[x:A;\vec f] ⊑ [x:A';\vec f']}
 
-  \ru{sub-→}
+  \ru{sub-$→$}
   \inferrule
     { A' ⊑ A\\B ⊑ B'}
     {(x:A) → B ⊑ (x:A') → B'}
 
-  \ru{sub-∧-l}
+  \ru{sub-$∧$-l}
   \inferrule
     {A ⊑ A'}
     {A ∧ B ⊑ A'}
 
-  \ru{sub-∧-r}
+  \ru{sub-$∧$-r}
   \inferrule
     {A ⊑ A' \\ A ⊑ B' }
     {A ⊑ A' ∧ B'}
 
-  \ru{sub-∨-l}
+  \ru{sub-$∨$-l}
   \inferrule
     {A ⊑ A' \\ B ⊑ A' }
     {A ∨ B ⊑ A'  }
 
-  \ru{sub-∨-r}
+  \ru{sub-$∨$-r}
   \inferrule
     {A ⊑ A' }
     {A ⊑ A' ∨ B'  }
 
   \ru{sub-fin}
   \inferrule
-    {`\vec x ⊆ {`\vec x'} }
-    {\fin {`\vec x} ⊑ \fin {`\vec x'} }
-
-  \ru{sub-fin}
-  \inferrule
-    {`\vec x ⊆ {`\vec x'} }
-    {\fin {`\vec x} ⊑ \fin {`\vec x'} }
+    {`\vec x ⊆ {`\vec y'} }
+    {\fin {`\vec x} ⊑ \fin {`\vec y'} }
 
   \ru{sub-refl}
   \inferrule
@@ -257,7 +266,7 @@ Subtyping judgement:
   \end{mathpar}
 
   because there can be both positive and negative occurences of the
-  argument. (consider t = t' = λx. x → x). And so would be other
+  argument. (consider $t = t' = λx. x → x$). And so would be other
   eliminators. So in the end it's better to have only the reflection
   rule and drop the rules for eliminators and introductions of
   non-type rules.
@@ -268,12 +277,16 @@ Subtyping judgement:
   $⊥$ as least element and
   $[]$ as greatest element.
 
-Evaluation rules:
+\subsection*{Convertibility: $t = u$}
+
+The convertibility relation $(=)$ is the smallest transitive
+  reflexive congruence containing the following equalities.
 \begin{align*}
   (λx.t) u & = t[u/x]\\
   (x = t, …).x & = t\\
-  (\splt {x ↦ t, …}) `x & = t
+  (\splt {x ↦ t, …}) `x & = t \\
 \end{align*}
+
 
   % \ru{sub-lam}
   % \inferrule
@@ -290,8 +303,8 @@ Evaluation rules:
   %   {\fin x'_i ⊆ \fin x_i \\ x_i = x_j ⟶ t_i ⊑ t'_i}
   %   {\splt {x_i ↦ t_i} ⊑ \splt {x'_i ↦ t'_i} }
 
-Evaluation rules for meet and join (they do not change the power of
-the theory, but they can be convenient to have in a prototype system.)
+Conversion rules for meet and join (alternatively add $x ⊑ y$ and
+$y ⊑ x$ implies $x = y$).
 \begin{align*}
   ((x:A) → B) ∧ ((x:A') → B') &= (x:A ∨ A') → (B ∧ B') \\
   [\vec f] ∧ [\vec f']                  &= [\vec f ∧ \vec f'] \\
@@ -301,6 +314,9 @@ the theory, but they can be convenient to have in a prototype system.)
   \{ \vec t \} ∧ \{ \vec t' \} & = \{ \vec t ∩ \vec t' \} \\
   A ∧ A & = A \\
   A ∧ B & = ⊥ & \text {otherwise and if neither $A$ or $B$ is neutral.} \\
+\end{align*}
+
+\begin{align*}
   ((x:A) → B) ∨ ((x:A') → B') &= (x:A ∧ A') → (B ∨ B') \\
   [\vec f] ∨ [\vec f']                  &= [\vec f ∨ \vec f'] \\
   ─ ∨ \vec f       &= ─ \\
@@ -318,9 +334,12 @@ the theory, but they can be convenient to have in a prototype system.)
 % (λx.t|λx.u) = λx.(t|u)
 % (t|crash) = t
 
-Algorithmic (bi-directional) rules. Checking rules:
+
 \newcommand\chk{:\!\!?\hspace{2pt}}
 \newcommand\ifr{:!}
+\subsection*{Algorithmic rules: $Γ ⊢ t \chk A$ and $Γ ⊢ t \ifr A$}
+
+Checking rules:
 \begin{mathpar}
   \ru{check-rec-intro-l}
   \inferrule
@@ -331,6 +350,11 @@ Algorithmic (bi-directional) rules. Checking rules:
   \inferrule
   {Γ ⊢ (\vec r) \chk [\vec f[t/x] ] \\ f=t ∈ \vec r \\ Γ ⊢ t \chk A  }
   {Γ ⊢ (\vec r) \chk [x : A; \vec f ]  }
+
+  \ru{check-rec-elim}
+  \inferrule
+  {Γ ⊢ t \chk [x : A]  }
+  {Γ ⊢ t.x \chk A  }
 
   \ru{check-pi-intro}
   \inferrule
