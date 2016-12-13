@@ -36,6 +36,8 @@ eval _ (Undef _)       = error "undefined (2)"
 eval _ (Real r)        = VPrim (toDyn r) (show r)
 eval _ (Prim ('#':nm)) = VAbstract nm
 eval _ (Prim nm)       = lkPrim nm
+eval e (Meet t u)      = VMeet (eval e t) (eval e u)
+eval e (Join t u)      = VJoin (eval e t) (eval e u)
 
 abstract :: String -> [Val] -> Val
 abstract x = foldl app (VAbstract x)
@@ -176,7 +178,15 @@ sub k (VPi u v) (VPi u' v') = do
   let w = mkVar k
   conv k u' u  <> sub (k+1) (app v w) (app v' w)
 sub k (VRecordT fs) (VRecordT fs') = convTele True k fs fs'
+sub k (VJoin a b) c = sub k a c <> sub k b c
+sub k (VMeet a b) c = sub k a c `orElse` sub k b c
+sub k c (VJoin a b) = sub k c a `orElse` sub k c b
+sub k c (VMeet a b) = sub k c a <> sub k c b
 sub k x              x'           = conv k x x'
+
+orElse Nothing _ = Nothing
+orElse _ Nothing = Nothing
+orElse (Just x) (Just y) = Just (x <> " and " <> y)
 
 convEnv :: Int -> Env -> Env -> Maybe String
 convEnv k e e' = mconcat $ zipWith (conv k) (valOfEnv e) (valOfEnv e')

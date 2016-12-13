@@ -65,6 +65,8 @@ data Ter = App Ter Ter
          | Undef Loc
          | Prim String
          | Real Double
+         | Meet Ter Ter
+         | Join Ter Ter
 
   deriving Eq
 
@@ -97,6 +99,8 @@ data Val = VU
          | VLam (Val -> Val)
          | VPrim Dynamic String
          | VAbstract String
+         | VMeet Val Val
+         | VJoin Val Val
   -- deriving Eq
 
 mkVar :: Int -> Val
@@ -157,6 +161,8 @@ showTele (((x,_loc),t):tele) = (return x <> " : " <> showTer t <> ";") $$ showTe
 
 showTer :: Ter -> D
 showTer U             = "U"
+showTer (Meet e0 e1)  = showTer e0 <+> "/\\" <+> showTer e1
+showTer (Join e0 e1)  = showTer e0 <+> "\\/" <+> showTer e1
 showTer (App e0 e1)   = showTer e0 <+> showTer1 e1
 showTer (Pi e0 e1)    = "Pi" <+> showTers [e0,e1]
 showTer (Lam (x,_) e) = "\\" <> return x <+> "->" <+> showTer e
@@ -201,6 +207,8 @@ instance Pretty Val where pretty = showVal
 showVal :: Val -> D
 showVal t0 = case t0 of
   VU            -> "U"
+  (VJoin u v)  -> pretty u <+> "\\/" <+> pretty v
+  (VMeet u v)  -> pretty u <+> "/\\" <+> pretty v
   (Ter t env)  -> pretty t <+> pretty env
   (VCon c us)  -> pretty c <+> showVals us
   (VPi a f)    -> "Pi" <+> svs [a,f]

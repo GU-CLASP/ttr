@@ -82,7 +82,7 @@ runResolver :: Resolver a -> Either String a
 runResolver x = runIdentity $ runErrorT $ runReaderT x emptyEnv
 
 updateModule :: String -> Env -> Env
-updateModule mod e = e {envModule = mod}
+updateModule modu e = e {envModule = modu}
 
 insertBinder :: (C.Binder,SymKind) -> Env -> Env
 insertBinder (x@(n,_),var) e
@@ -183,6 +183,8 @@ resolveExp (Let decls e) = do
   C.mkWheres rdecls <$> local (insertBinders names) (resolveExp e)
 resolveExp (Real r) = return (C.Real r)
 resolveExp (PrimOp p) = return (C.Prim p)
+resolveExp (And t u) = C.Meet <$> resolveExp t <*> resolveExp u
+resolveExp (Or t u) = C.Join <$> resolveExp t <*> resolveExp u
 
 resolveExps :: [Exp] -> Resolver [Ter]
 resolveExps ts = traverse resolveExp ts

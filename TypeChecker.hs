@@ -158,7 +158,7 @@ check a t = case (a,t) of
   _ -> do
     logg ("checking that term " ++ show t ++ " has type " ++ show a) $ do
        v <- checkInfer t
-       checkConv "inferred type" a v
+       checkSub "inferred type" a v
 
 -- | Check that a record has a given type
 checkRecord :: VTele -> [(String,Ter)] -> Typing ()
@@ -180,17 +180,13 @@ eval' t = do
   e <- asks env
   return $ eval e t
 
-checkConvs :: String -> [Val] -> [Val] -> Typing ()
-checkConvs msg a v = sequence_ [checkConv msg a' v' | (a',v') <- zip a v]
-  
-checkConv :: [Char] -> Val -> Val -> ReaderT TEnv (ErrorT String IO) ()
-checkConv msg a v = do
+checkSub :: [Char] -> Val -> Val -> ReaderT TEnv (ErrorT String IO) ()
+checkSub msg a v = do
     k <- index <$> ask
-    case conv k v a of
+    case sub k v a of
       Nothing -> return ()
       Just err -> do
-      rho <- asks env
-      oops $ msg ++ " check conv: \n  " ++ show v ++ " /= " ++ show a ++ "\n because  " ++ err
+      oops $ msg ++ " check sub: \n  " ++ show v ++ " not a subtype of " ++ show a ++ "\n because  " ++ err
 
 checkBranch :: (Tele,Env) -> Val -> Brc -> Typing ()
 checkBranch (xas,nu) f (c,(xs,e)) = do
@@ -240,6 +236,14 @@ checkInfer e = case e of
     case a of
       VRecordT rt -> checkInferProj l t' rt
       _          -> oops $ show a ++ " is not a record-type"
+  Meet t u -> do
+    _ <- inferType t
+    _ <- inferType u
+    return VU
+  Join t u -> do
+    _ <- inferType t
+    _ <- inferType u
+    return VU
   Where t d -> do
     checkDecls d
     localM (addDecls d) $ checkInfer t
