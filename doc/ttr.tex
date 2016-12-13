@@ -71,8 +71,9 @@ Syntax:
           & ∣~    ⊥ \\
           & ∣~    (x:A) → B \\
           & ∣~    [ l_i : t_i ] \\
-          & ∣~    \fin{`\vec x } \\
+          & ∣~    \fin{ x_i } \\
           & ∣~    A ∧ B ~|~ A ∨ B 
+          & ∣~    (t : A) & \text{ annotated term }\\
 \end{align*}
 \begin{align*}
   Γ,Δ & ::=  — \\
@@ -155,8 +156,8 @@ Example types:
 
   \ru{rec-intro-r}
   \inferrule
-  {Γ, \vec f ⊢ t : A \\ Γ ⊢ (k_1=t_1 …  k_m=t_m) : [l_1:A_1[t/l] … l_n:A_n[t/l] ]   }
-  {Γ ⊢ (l_0=t, k_1=t_1 … k_m=t_m) : [l_0:A_0 ; l_1:A_1 … l_n:A_n  ]  }
+  {Γ ⊢ t_0 : A_0 \\ Γ ⊢ (k_0=t_0 …  k_m=t_m) : [l_1:A_1[t/l] … l_n:A_n[t/l] ]   }
+  {Γ ⊢ (l_0=t_0, k_1=t_1 … k_m=t_m) : [l_0:A_0 ; l_1:A_1 … l_n:A_n  ]  }
 
   \ru{rec-elim}
   \inferrule
@@ -295,6 +296,8 @@ relation on values.)
   % rule and drop the rules for eliminators and introductions of
   % non-type rules.
 
+  In the \ru{sub-refl} rule we write $\eval A Γ$ to mean $\eval A [x_i↦X_i, ∀ x_i:C_i ∈ Γ]$.
+
   $⊑$ forms a lattice with
   $∧$ as meet,
   $∨$ as join,
@@ -326,59 +329,16 @@ compatible. Thus, two records will be considered convertible if the
 matching fields are convertible. Likewise for splits.
 
 \begin{theorem}
-Theorem: convertibility and subtyping are decidable relations
+Convertibility and subtyping are decidable relations
 \end{theorem}
-
-  % \ru{sub-lam}
-  % \inferrule
-  %   {u ⊑ t[x/y]}
-  %   {λx.u ⊑ λy.t }
-
-  % \ru{sub-rec}
-  % \inferrule
-  %   {x'_i = x'_j \conv t_i ⊑ t'_i}
-  %   {(x_i = t_i) ⊑ (x'_i = t'_i) }
-
-  % \ru{sub-split}
-  % \inferrule
-  %   {\fin x'_i ⊆ \fin x_i \\ x_i = x_j \conv t_i ⊑ t'_i}
-  %   {\splt {x_i ↦ t_i} ⊑ \splt {x'_i ↦ t'_i} }
-
-% Conversion rules for meet and join (alternatively add $x ⊑ y$ and
-% $y ⊑ x$ implies $x = y$).
-% \begin{align*}
-%   ((x:A) → B) ∧ ((x:A') → B') &= (x:A ∨ A') → (B ∧ B') \\
-%   [\vec f] ∧ [\vec f']                  &= [\vec f ∧ \vec f'] \\
-%   ─ ∧ \vec f       &= \vec f \\
-%   (x:A,\vec f) ∧ \vec f'       &= x:A,(\vec f ∧ \vec f')  & x ∉ \vec f' \\
-%   (x:A,\vec f) ∧ (x:A',\vec f')       &= x:(A ∧ A'),(\vec f ∧ \vec f') \\
-%   \{ \vec t \} ∧ \{ \vec t' \} & = \{ \vec t ∩ \vec t' \} \\
-%   A ∧ A & = A \\
-%   A ∧ B & = ⊥ & \text {otherwise and if neither $A$ or $B$ is neutral.} \\
-% \end{align*}
-
-% \begin{align*}
-%   ((x:A) → B) ∨ ((x:A') → B') &= (x:A ∧ A') → (B ∨ B') \\
-%   [\vec f] ∨ [\vec f']                  &= [\vec f ∨ \vec f'] \\
-%   ─ ∨ \vec f       &= ─ \\
-%   (x:A,\vec f) ∨ \vec f'       &= (\vec f ∨ \vec f')  & x ∉ \vec f' \\
-%   (x:A,\vec f) ∨ (x:A',\vec f')       &= x:(A ∨ A'),(\vec f ∨ \vec f') \\
-%   \{ \vec t \} ∨ \{ \vec t' \} & = \{ \vec t ∪ \vec t' \} \\
-%   A ∨ A & = A \\
-%   A ∨ B & = [] & \text {otherwise and if neither $A$ or $B$ is neutral.}
-% \end{align*}
-
-% Perhaps have a parallel execution as the introductor of meet?
-% (t|u) : A ∧ B
-% (t|u) v = (t v|u v)
-% (t|u).x = (t.x|u.x)
-% (λx.t|λx.u) = λx.(t|u)
-% (t|crash) = t
-
 
 \newcommand\chk{:\!\!?\hspace{2pt}}
 \newcommand\ifr{:!}
 \subsection*{Algorithmic rules: $Γ ⊢ t \chk A$ and $Γ ⊢ t \ifr A$}
+The judgement $Γ ⊢ t : A$ is unfortunately not decidable, because it
+requires conjuring up types for certain intermediate results. Thus we
+define another judgement which has a decidable form, but demands
+certain types to be explicitly written.
 
 Checking rules:
 \begin{mathpar}
@@ -392,11 +352,6 @@ Checking rules:
   {Γ ⊢ (\vec r) \chk [\vec f[t/x] ] \\ f=t ∈ \vec r \\ Γ ⊢ t \chk A  }
   {Γ ⊢ (\vec r) \chk [x : A; \vec f ]  }
 
-  \ru{check-rec-elim}
-  \inferrule
-  {Γ ⊢ t \chk [x : A]  }
-  {Γ ⊢ t.x \chk A  }
-
   \ru{check-pi-intro}
   \inferrule
   {Γ, x:A ⊢ t \chk B }
@@ -406,6 +361,11 @@ Checking rules:
   \inferrule
   {Γ ⊢ t \ifr A \\ A ⊑ B }
   {Γ ⊢ t \chk B }
+
+ \ru{check-fin-elim}
+ \inferrule
+  {Γ ⊢ t_i \chk A_i[l_i]  }
+  {Γ ⊢ \splt {`l_i ↦ t_i, …} \chk (x : \fin { `l_i }) → A_i[x] }
 
 \end{mathpar}
 
@@ -423,7 +383,7 @@ Inference rules:
 
   \ru{inf-fin-intro}
   \inferrule
-  {`x = x_i }
+  { }
   {Γ ⊢ `x \ifr \fin {`x} }
 
   \ru{inf-pi-elim}
@@ -445,11 +405,6 @@ Inference rules:
  \inferrule
  {Γ ⊢ (t:[\vec f [t.y/y]]).x \ifr A   }
  {Γ ⊢ (t:[y:B; \vec f]).x \ifr A  }
-
- \ru{inf-fin-elim}
- \inferrule
-  {Γ ⊢ t_i \ifr A_i  }
-  {Γ ⊢ \splt {`x_i ↦ t_i, …} \ifr (y : \fin { `x_i, … }) → ⋀_i A_i[y/`x_i] }
 
 \end{mathpar}
 
@@ -477,12 +432,18 @@ system below, one gets a term whose type is decidable.
     \trp{x} & = x \\
     \trp{t u} & = \trp t \trn u \\
     \trp{t.l} & = \trn t.l \\
+    \trp{`l} & = `l \\
     \trp{u} & = (\trn u : T)  & \text {otherwise --- note that $T$ comes from the typing derivation} \\
     \trn{λx.t} & = (λx. \trn t) \\
-    \trn{(l_0 = t_0, … , l_n = t_n )} & = {(l_0 = \trn t_0, … , l_n = \trn t_n )} \\
+    \trn{(l_0 = t_0, … , l_n = t_n )} & = {(l_0 = \trn t_0, … , l_n = \trn {t_n} )} \\
+    \trn{\splt {`l_i ↦ t_i, …} } & = {\splt {`l_i ↦ \trn {t_i}, …} } \\
     \trn{t} & = \trp{t} & \text {otherwise} \\
   \end{align*}
 \end{definition}
+
+The idea is to translate terms whose type are inferable using the +
+translation, leaving the others to the - translation. If + is used on
+a non-inferrable term, then an annotation is added.
 
 \begin{theorem}~
   \begin{itemize}
@@ -501,12 +462,59 @@ system below, one gets a term whose type is decidable.
   By erasing the type annotations in the proof term.
 \end{proof}
 
+\subsection*{Acks}
 This system is based on
 ``A simple type-theoretic language: Mini-TT'',
 Coquand et al.
 \url{http://www.cse.chalmers.se/~bengt/papers/GKminiTT.pdf}
 
-To have a complete system one would need 
+
+\subsection*{Convenience}
+In this section we add some rules that are but can be useful to add to
+avoid type annotations.
+
+Typing:
+\begin{mathpar}
+  \ru{check-rec-elim}
+  \inferrule
+  {Γ ⊢ t \chk [x : A]  }
+  {Γ ⊢ t.x \chk A  }
+
+ \ru{inf-fin-elim}
+ \inferrule
+  {Γ ⊢ t_i \ifr A_i  }
+  {Γ ⊢ \splt {`l_i ↦ t_i, …} \ifr (x : \fin { `l_i }) → ⋀_i A_i[x/`l, …_i] }
+\end{mathpar}
+
+Evaluation for meet and join:
+\begin{align*}
+  ((x:A) → B) ∧ ((x:A') → B') &= (x:A ∨ A') → (B ∧ B') \\
+  [\vec f] ∧ [\vec f']                  &= [\vec f ∧ \vec f'] \\
+  ─ ∧ \vec f       &= \vec f \\
+  (l:A;\vec f) ∧ \vec f'       &= l:A;(\vec f ∧ \vec f')  & x ∉ \vec f' \\
+  (l:A;\vec f) ∧ (l:A';\vec f')       &= l:(A ∧ A');(\vec f ∧ \vec f') \\
+  \{ \vec t \} ∧ \{ \vec t' \} & = \{ \vec t ∩ \vec t' \} \\
+  A ∧ A & = A \\
+  A ∧ B & = ⊥ & \text {otherwise and if neither $A$ or $B$ is neutral.} \\
+\end{align*}
+\begin{align*}
+  ((x:A) → B) ∨ ((x:A') → B') &= (x:A ∧ A') → (B ∨ B') \\
+  [\vec f] ∨ [\vec f']                  &= [\vec f ∨ \vec f'] \\
+  ─ ∨ \vec f       &= ─ \\
+  (l:A;\vec f) ∨ \vec f'       &= (\vec f ∨ \vec f')  & x ∉ \vec f' \\
+  (l:A;\vec f) ∨ (l:A';\vec f')       &= l:(A ∨ A');(\vec f ∨ \vec f') \\
+  \{ \vec t \} ∨ \{ \vec t' \} & = \{ \vec t ∪ \vec t' \} \\
+  A ∨ A & = A \\
+  A ∨ B & = [] & \text {otherwise and if neither $A$ or $B$ is neutral.}
+\end{align*}
+
+% Perhaps have a parallel execution as the introductor of meet?
+% (t|u) : A ∧ B
+% (t|u) v = (t v|u v)
+% (t|u).x = (t.x|u.x)
+% (λx.t|λx.u) = λx.(t|u)
+% (t|crash) = t
+
 
 % \printbibliography
 \end{document}
