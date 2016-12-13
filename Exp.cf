@@ -30,12 +30,14 @@ Lam.      Exp  ::= "\\" AIdent [AIdent] "->" Exp ;
 Split.    Exp  ::= "split" "{" [Branch] "}" ;
 Fun.      Exp1 ::= Exp2 "->" Exp1 ;
 Pi.       Exp1 ::= "(" PseudoTDecl ")" "->" Exp1 ;
-Record.   Exp1 ::= "[" [PseudoTDecl] "]"  ;
+Or.       Exp1 ::= Exp1 "\\/" Exp1;
+And.      Exp1 ::= Exp1 "/\\" Exp1;
 App.      Exp2 ::= Exp2 Exp3 ;
 Proj.     Exp3 ::= Exp3 "." AIdent ;
-Tuple.     Exp3 ::= "(" [Fld] ")" ;
+Tuple.    Exp3 ::= "(" [Fld] ")" ;
+Record.   Exp3 ::= "[" [PseudoTDecl] "]"  ;
 Var.      Exp3 ::= AIdent ;
-U.        Exp3 ::= "U" ;
+U.        Exp3 ::= "Type" ;
 Real.     Exp3 ::= Double ;
 coercions Exp 3 ;
 
