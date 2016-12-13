@@ -1,0 +1,21 @@
+module Meet where
+
+
+meetA : (A B : Type) -> (A /\ B) -> A
+meetA A B p = p
+
+meetAB : (A B : Type) -> (A /\ B) -> [fst : A; snd : B]
+meetAB A B p = (fst = p, snd = p)
+
+Plus : Type -> Type -> Type
+data Plus A B = Inl (x : A) | Inr (y : B)
+
+joinAB : (A B : Type) -> Plus A B -> (A \/ B)
+joinAB A B = split
+               Inl x -> x
+               Inr y -> y
+
+joinA : (A B : Type) -> A -> A \/ B
+joinA A B p = p
+
+
