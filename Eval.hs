@@ -97,7 +97,7 @@ evalTele e (((x,l),t):ts) = VBind x t' (\x' -> evalTele (Pair e ((x,l),x')) ts)
 
 app :: Val -> Val -> Val
 app (VLam f) u = f u
--- app (Ter (Lam cs x t) e) u = eval (Pair e (x,clams cs u)) t
+-- app (Ter (Lam cs x t) e) u = eval (Pair e (x,u)) t
 app (Ter (Split _ nvs) e) (VCon name us) = case lookup name nvs of
     Just (xs,t) -> eval (upds e (zip xs us)) t
     Nothing -> error $ "app: Split with insufficient arguments; " ++
@@ -129,6 +129,9 @@ equal a b | a == b = Nothing
 different :: (Show a) => a -> a -> Maybe [Char]
 different a b = Just $ show a ++ " /= " ++ show b
 
+noSub :: forall a a1. (Show a1, Show a) => a -> a1 -> Maybe [Char]
+noSub a b = Just $ show a ++ " not a subtype of " ++ show b
+
 -- | @conv k a b@ Checks that @a@ can be converted to @b@.
 conv :: Int -> Val -> Val -> Maybe String
 conv _ VU VU = Nothing
@@ -154,7 +157,7 @@ conv k (VPi u v) (VPi u' v') = do
   let w = mkVar k
   conv k u' u  <> conv (k+1) (app v w) (app v' w)
 conv k (VRecordT fs) (VRecordT fs') = 
-  convTele k fs fs'
+  convTele False k fs fs'
 conv k (VProj l u) (VProj l' u') = equal l l' <> conv k u u'
 conv k (VCon c us) (VCon c' us') =
   (c `equal` c') <> mconcat (zipWith (conv k) us us')
@@ -166,15 +169,25 @@ conv _ (VAbstract n) (VAbstract n') = n `equal` n'
 conv _ (VPrim _ _) (VPrim _ _) = Nothing
 conv _ x              x'           = different x x'
 
+-- @sub _ a b@: check that a is a subtype of b.
+sub :: Int -> Val -> Val -> Maybe String
+sub _ VU VU = Nothing
+sub k (VPi u v) (VPi u' v') = do
+  let w = mkVar k
+  conv k u' u  <> sub (k+1) (app v w) (app v' w)
+sub k (VRecordT fs) (VRecordT fs') = convTele True k fs fs'
+sub k x              x'           = conv k x x'
+
 convEnv :: Int -> Env -> Env -> Maybe String
 convEnv k e e' = mconcat $ zipWith (conv k) (valOfEnv e) (valOfEnv e')
 
-convTele :: Int -> VTele -> VTele -> Maybe String
-convTele _ _ VEmpty = Nothing
-convTele k (VBind l a t) (VBind l' a' t') = do
+convTele :: Bool -> Int -> VTele -> VTele -> Maybe String
+convTele True _ _ VEmpty = Nothing
+convTele _ _ VEmpty VEmpty = Nothing
+convTele subp k (VBind l a t) (VBind l' a' t') = do
   let v = mkVar k
-  equal l l' <> conv k a a' <> convTele (k+1) (t v) (t' v)
-convTele _ x x' = different x x'
+  equal l l' <> (if subp then sub else conv) k a a' <> convTele subp (k+1) (t v) (t' v)
+convTele subp _ x x' = (if subp then noSub else different) x x'
 
 convFields :: Int -> [(String,Val)] -> [(String,Val)] -> Maybe String
 convFields _ [] [] = Nothing
