@@ -268,13 +268,13 @@ Subtyping is a relation on values defined as follows:
 
   \ru{sub-rec-skip}
   \inferrule
-    {V ⊑ \app W X}
-    {[l_0:A_0; V] ⊑ W}
+    {W ⊑ \app {W'} X}
+    {[l_0:V_0; W] ⊑ W'}
 
   \ru{sub-rec-cong}
   \inferrule
-    {A_0 ⊑ B_0 \\ \app V X  ⊑ \app W X}
-    {[l_0:A_0; V] ⊑ [k_0:B_0; W]}
+    {V_0 ⊑ V'_0 \\ \app W X  ⊑ \app {W'} X}
+    {[l_0:V_0; W] ⊑ [k_0:V'_0; W']}
 
   \ru{sub-$→$}
   \inferrule
@@ -337,7 +337,7 @@ Subtyping is a relation on values defined as follows:
   $⊥$ as least element and
   $[]$ as greatest element.
 \subsection*{Convertibility: $t \conv u$}
-The convertibility relation is a smallest transitive
+The convertibility relation is the smallest transitive
 reflexive congruence containing the following rules:
 
 \begin{mathpar}
@@ -379,7 +379,7 @@ Checking rules:
 
   \ru{check-rec-intro-r}
   \inferrule
-  {Γ ⊢ t \chk V  \\ Γ ⊢ (l_i = t_i) \chk [\app W {\eval t Γ} ] \\ l=t ∈ {l_i = t_i} }
+  {Γ ⊢ t \chk V  \\ Γ ⊢ (l_i = t_i) \chk [\app W {\eval t Γ} ] \\ (l=t) ∈ \fin {l_i = t_i} }
   {Γ ⊢ (l_i = t_i) \chk [l : V; W]  }
 
   \ru{check-pi-intro}
@@ -554,7 +554,6 @@ This system is based on
 ``A simple type-theoretic language: Mini-TT'',
 Coquand et al.
 \url{http://www.cse.chalmers.se/~bengt/papers/GKminiTT.pdf}
-
 
 \subsection*{Convenience}
 In this section we add some rules that are but can be useful to add to
