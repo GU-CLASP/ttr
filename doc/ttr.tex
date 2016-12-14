@@ -58,7 +58,13 @@
 \newcommand\proj[2]{#1 • #2}
 \begin{document}
 
-Syntax:
+This note describes a syntax, type checking rules and type-checking
+algorithm for an intuitionistic type-theory. The goal is to capture
+Cooper's TTR.
+\subsection*{Syntax}
+The syntax for type and proof terms is as follow. Note in particular
+that, because we have dependent types, the syntaxes of types and proof
+terms are unified.
 \begin{align*}
   t,u,A,B & ::=  x \\
           & ∣~    λx. t \\
@@ -67,13 +73,13 @@ Syntax:
           & ∣~    t.l & \text{projection} \\
           & ∣~    `l & \text{tag} \\
           & ∣~    \splt {`l_i ↦ t_i, …} \\
-          & ∣~    \Type \\
-          & ∣~    ⊥ \\
-          & ∣~    (x:A) → B \\
-          & ∣~    [ l_i : t_i ] \\
-          & ∣~    \fin{ x_i } \\
-          & ∣~    A ∧ B ~|~ A ∨ B 
           & ∣~    (t : A) & \text{ annotated term }\\
+          & ∣~    \Type \\
+          % & ∣~    ⊥ \\
+          & ∣~    (x:A) → B \\
+          & ∣~    [ l_i : A_i ] \\
+          & ∣~    \fin{ `l_i } \\
+          & ∣~    A ∧ B ~|~ A ∨ B 
 \end{align*}
 \begin{align*}
   Γ,Δ & ::=  — \\
@@ -82,6 +88,7 @@ Syntax:
 
 Example types:
 \begin{align*}
+  ⊥ & = \fin {} \\
   Σ(x:A)(B[x]) & = [fst : A ; snd : B[fst]] \\
   A × B & = Σ(\_:A)B \\
   A → B & = (\_:A) → B \\
@@ -89,16 +96,17 @@ Example types:
 \end{align*}
 
 \subsection*{Type checking: $Γ ⊢ t : A$}
+The type checking relation is defined inductively by the following rules:
 \begin{mathpar}
   \ru{type-form}
   \inferrule
   { }
   {Γ ⊢ \Type \istype}
 
-  \ru{$⊥$-form}
-  \inferrule
-  { }
-  {Γ ⊢ ⊥  \istype}
+  % \ru{$⊥$-form}
+  % \inferrule
+  % { }
+  % {Γ ⊢ ⊥  \istype}
 
   \ru{$→$-form}
   \inferrule
@@ -186,14 +194,46 @@ Example types:
 
   \ru{sub}
   \inferrule
-  {Γ ⊢ t : A \\ A ⊑ B  }
+  {Γ ⊢ t : A \\ \eval A Γ ⊑ \eval B Γ  }
   {Γ ⊢ t : B }
 
 \end{mathpar}
 
-(There are no rules for meet and join because the conversion rules takes care of them.)
+Remark: there are no rules for meet and join because the conversion
+rules takes care of those types. See in particular the subtyping
+relation below.
 
-\subsection*{Evaluation: $\eval · ρ$}
+In the \ru{sub} rule we write $\eval A Γ$ to mean
+$\eval A {[x_i↦X_i, ∀ x_i:C_i ∈ Γ]}$ (see evaluation below).
+
+
+\subsection*{Values}
+Neutral values:
+\begin{align*}
+  n,v,w,V,W & ::=  X & \text{unknown value} \\
+      & ∣~    ⟨x,t,ρ⟩ & \text{closure (suspended function evaluation)} \\
+      & ∣~    n v & \text{application} \\
+      & ∣~    (l_i = t_i) & \text{record} \\
+      & ∣~    n.l & \text{projection} \\
+      & ∣~    `l & \text{tag} \\
+      & ∣~    \splt {`l_i ↦ v_i, …} \\
+      & ∣~    \Type \\
+      % & ∣~    ⊥ \\
+      & ∣~    Π V W \\
+      & ∣~    [] \\
+      & ∣~    [l : V ; W ] \\
+      & ∣~    \fin{ `l_i }  & \text{finite set} \\
+      & ∣~    V ∧ W ~|~ V ∨ W 
+\end{align*}
+Environments map variables to values:
+\begin{align*}
+  ρ ::= [] ∣ [ρ, x ↦ V]
+\end{align*}
+
+\subsection*{Evaluation: $\eval t ρ$}
+The evaluation function maps a term $t$ and an environment $ρ$ to a
+value $\eval t ρ$. It assumes that all free variables in $t$ are bound
+in $ρ$.
 \begin{align*}
   \eval {x} ρ &= ρ(x) \\
   \eval {λx.t} ρ &= ⟨ x,t,ρ⟩ \\
@@ -203,7 +243,7 @@ Example types:
   \eval {\splt{x_i↦t_i}} ρ &=  {\splt{x_i↦\eval{t_i}ρ}}\\
   \eval {\Type} ρ &= \Type \\
   \eval {(x:A) → B} ρ &= Π \eval A ρ \eval {λx.B}ρ \\
-  \eval {[l_0 : A_0;…;l_n = A_n]} ρ &= l_0 : t_0; \eval{λx.[l_i : A_i[x/l_0]]}ρ  \\
+  \eval {[l_0 : A_0;…;l_n = A_n]} ρ &= l_0 : \eval {A_0} ρ; \eval{λx.[l_i : A_i[x/l_0]]}ρ  \\
   \eval {[]} ρ &= [] \\
   \eval {\fin{`l_i}} ρ &= \fin{`l_i} \\
   \eval {A ∧ B} ρ &= \eval A ρ ∧ \eval B ρ  \\
@@ -215,55 +255,51 @@ Example types:
  \app{\splt{…;l↦t;…}} {`l} & = t \\
  \app n u & = n u & \text{otherwise} \\
  \proj {(…,l=t,…)} l & = t \\
- \proj n l & = n.l & \text{otherwise} 
+ \proj n l & = n.l & \text{otherwise}
 \end{align*}
-Remark: the evaluation process terminates. Indeed, it is structural
-over terms, except for the application case, which may delay the
-recursion but still decreases the size of terms after app is expanded.
-\subsection*{Subtyping: $A ⊑ B$}
-(Note that I am using term syntax for convenience, but subtyping is a
-relation on values.)
+\subsection*{Subtyping: $V ⊑ W$}
+Subtyping is a relation on values defined as follows:
 \begin{mathpar}
 
   \ru{sub-top}
   \inferrule
     { }
-    {A ⊑ []} % [] has no elimination rule
+    {V ⊑ []} % [] has no elimination rule
 
   \ru{sub-rec-skip}
   \inferrule
-    {[l_1:A_1 …  l_n:A_n] ⊑ [k_1:B_1 …  k_n:B_n]}
-    {[l_0:A_0; l_1:A_1 …  l_n:A_n] ⊑ [k_1:B_1 …  k_n:B_n]}
+    {V ⊑ \app W X}
+    {[l_0:A_0; V] ⊑ W}
 
   \ru{sub-rec-cong}
   \inferrule
-    {A_0 ⊑ B_0 \\ [l_1:A_1 …  l_n:A_n] ⊑ [k_1:B_1 …  k_n:B_n]}
-    {[l_0:A_0; l_1:A_1 …  l_n:A_n] ⊑ [k_0:B_0;k_1:B_1 …  k_n:B_n]}
+    {A_0 ⊑ B_0 \\ \app V X  ⊑ \app W X}
+    {[l_0:A_0; V] ⊑ [k_0:B_0; W]}
 
   \ru{sub-$→$}
   \inferrule
-    { A' ⊑ A\\B ⊑ B'}
-    {(x:A) → B ⊑ (x:A') → B'}
+    {V' ⊑ V\\ \app W X ⊑ \app {W'} X}
+    {Π V W ⊑ Π V' W'}
 
   \ru{sub-$∧$-l}
   \inferrule
-    {A ⊑ A'}
-    {A ∧ B ⊑ A'}
+    {V ⊑ V'}
+    {V ∧ W ⊑ V'}
 
   \ru{sub-$∧$-r}
   \inferrule
-    {A ⊑ A' \\ A ⊑ B' }
-    {A ⊑ A' ∧ B'}
+    {V ⊑ V' \\ V ⊑ W' }
+    {V ⊑ V' ∧ W'}
 
   \ru{sub-$∨$-l}
   \inferrule
-    {A ⊑ A' \\ B ⊑ A' }
-    {A ∨ B ⊑ A'  }
+    {V ⊑ V' \\ W ⊑ V' }
+    {V ∨ W ⊑ V'  }
 
   \ru{sub-$∨$-r}
   \inferrule
-    {A ⊑ A' }
-    {A ⊑ A' ∨ B'  }
+    {V ⊑ V' }
+    {V ⊑ V' ∨ W'  }
 
   \ru{sub-fin}
   \inferrule
@@ -272,14 +308,13 @@ relation on values.)
 
   \ru{sub-refl}
   \inferrule
-    {\eval A Γ \conv \eval B Γ}
-    {A ⊑ B}
+    {V \conv W}
+    {V ⊑ W}
 
   \ru{sub-bot}
   \inferrule
     { }
-    {⊥ ⊑ A} % ⊥ has no introduction rule
-
+    {⊥ ⊑ V} % ⊥ has no introduction rule
   \end{mathpar}
 
 
@@ -296,8 +331,6 @@ relation on values.)
   % rule and drop the rules for eliminators and introductions of
   % non-type rules.
 
-  In the \ru{sub-refl} rule we write $\eval A Γ$ to mean $\eval A [x_i↦X_i, ∀ x_i:C_i ∈ Γ]$.
-
   $⊑$ forms a lattice with
   $∧$ as meet,
   $∨$ as join,
@@ -309,17 +342,16 @@ reflexive congruence containing the following rules:
 
 \begin{mathpar}
   \inferrule
-  {A \conv C \\ B \conv C}
-  {A ∨ B \conv C}
+  {V \conv U \\ W \conv U}
+  {V ∨ W \conv U}
 
   \inferrule
-  {A \conv C \\ B \conv C}
-  {A ∧ B \conv C}
+  {V \conv U \\ W \conv U}
+  {V ∧ W \conv U}
 
   \inferrule
-  {⟨ x,t,ρ⟩ \conv u \\ X ~\text{fresh}}
-  {\eval t {ρ,x↦X} \conv \app u X}
-
+  {⟨ x,t,ρ⟩ \conv v \\ X ~\text{fresh}}
+  {\eval t {ρ,x↦X} \conv \app v X}
 \end{mathpar}
 (symmetric rules are also included.)
 
@@ -328,13 +360,11 @@ required. That is we need to check that the terms are
 compatible. Thus, two records will be considered convertible if the
 matching fields are convertible. Likewise for splits.
 
-\begin{theorem}
-Convertibility and subtyping are decidable relations
-\end{theorem}
-
 \newcommand\chk{:\!\!?\hspace{2pt}}
 \newcommand\ifr{:!}
-\subsection*{Algorithmic rules: $Γ ⊢ t \chk A$ and $Γ ⊢ t \ifr A$}
+\newcommand{\ifrtype}{\ifr \Type}
+
+\subsection*{Algorithmic rules: $Γ ⊢ t \chk V$ and $Γ ⊢ t \ifr V$}
 The judgement $Γ ⊢ t : A$ is unfortunately not decidable, because it
 requires conjuring up types for certain intermediate results. Thus we
 define another judgement which has a decidable form, but demands
@@ -345,27 +375,27 @@ Checking rules:
   \ru{check-rec-intro-l}
   \inferrule
   { }
-  {Γ ⊢ (\vec f) \chk [ ]  }
+  {Γ ⊢ (l_i ↦ t_i) \chk [ ]  }
 
   \ru{check-rec-intro-r}
   \inferrule
-  {Γ ⊢ (\vec r) \chk [\vec f[t/x] ] \\ f=t ∈ \vec r \\ Γ ⊢ t \chk A  }
-  {Γ ⊢ (\vec r) \chk [x : A; \vec f ]  }
+  {Γ ⊢ t \chk V  \\ Γ ⊢ (l_i = t_i) \chk [\app W {\eval t Γ} ] \\ l=t ∈ {l_i = t_i} }
+  {Γ ⊢ (l_i = t_i) \chk [l : V; W]  }
 
   \ru{check-pi-intro}
   \inferrule
-  {Γ, x:A ⊢ t \chk B }
-  {Γ ⊢ λx.t \chk (x:A) → B }
+  {Γ, x:V ⊢ t \chk \app W X }
+  {Γ ⊢ λx.t \chk Π V W }
 
   \ru{check-conv}
   \inferrule
-  {Γ ⊢ t \ifr A \\ A ⊑ B }
-  {Γ ⊢ t \chk B }
+  {Γ ⊢ t \ifr V \\ V ⊑ W }
+  {Γ ⊢ t \chk W }
 
  \ru{check-fin-elim}
  \inferrule
-  {Γ ⊢ t_i \chk A_i[l_i]  }
-  {Γ ⊢ \splt {`l_i ↦ t_i, …} \chk (x : \fin { `l_i }) → A_i[x] }
+  {Γ ⊢ t_i \chk \app {V} {l_i}  }
+  {Γ ⊢ \splt {`l_i ↦ t_i, …} \chk Π \fin { `l_i } V}
 
 \end{mathpar}
 
@@ -373,13 +403,13 @@ Inference rules:
 \begin{mathpar}
   \ru{inf-var}
   \inferrule
-  {x : A ∈ Γ }
-  {Γ ⊢ x \ifr A }
+  {x : V ∈ Γ }
+  {Γ ⊢ x \ifr V }
 
   \ru{inf-ann}
   \inferrule
-  {Γ ⊢ x \chk A}
-  {Γ ⊢ (x : A) \ifr A }
+  {Γ ⊢ A \chk \Type \\ Γ ⊢ x \chk \eval A Γ}
+  {Γ ⊢ (x : A) \ifr \eval A Γ }
 
   \ru{inf-fin-intro}
   \inferrule
@@ -388,28 +418,85 @@ Inference rules:
 
   \ru{inf-pi-elim}
   \inferrule
-  {Γ ⊢ t \ifr (x:A) → B \\ Γ ⊢ u \chk A }
-  {Γ ⊢ t u \ifr B }
+  {Γ ⊢ t \ifr Π V W \\ Γ ⊢ u \chk V }
+  {Γ ⊢ t u \ifr \app W {\eval t Γ} }
 
  \ru{inf-rec-elim}
  \inferrule
- {Γ ⊢ t \ifr [\vec f]  \\ Γ ⊢ (t:[\vec f]).x \ifr A}
- {Γ ⊢ t.x \ifr A  }
+ {Γ ⊢ t \ifr [l_0 : V_0 ; W]  \\ Γ ⊢ (t:[l_0 : V_0 ; W]).l_k \ifr A}
+ {Γ ⊢ t.l_k \ifr A  }
 
  \ru{inf-rec-elim-l}
  \inferrule
  { }
- {Γ ⊢ (t:[x:A; \vec f]).x \ifr A  }
+ {Γ ⊢ (t:[l:V; W]).l \ifr V  }
 
  \ru{inf-rec-elim-r}
  \inferrule
- {Γ ⊢ (t:[\vec f [t.y/y]]).x \ifr A   }
- {Γ ⊢ (t:[y:B; \vec f]).x \ifr A  }
+ {Γ ⊢ (t:\app W {\proj {\eval t Γ} {l_0}} \ifr A   }
+ {Γ ⊢ (t:[l_0:V_0; W]).l \ifr W  }
 
+ \ru{inf-type-form}
+ \inferrule
+ { }
+ {Γ ⊢ \Type \ifrtype}
+ 
+  % \ru{$⊥$-form}
+  % \inferrule
+  % { }
+  % {Γ ⊢ ⊥  \ifrtype}
+
+  \ru{inf-$→$-form}
+  \inferrule
+  {Γ ⊢ A \ifrtype \\ Γ, x:A ⊢ B \ifrtype }
+  {Γ ⊢ (x:A) → B \ifrtype}
+
+  \ru{inf-rec-form-l}
+  \inferrule
+  {Γ ⊢ A \ifrtype \\ Γ, x:A ⊢ [l_1 : A_1[x] … l_n : A_n[x]] \ifrtype }
+  {Γ ⊢ [l : A; l_1 : A_1[l] … l_n : A_n[l] ] \ifrtype }
+
+  \ru{inf-rec-form-r}
+  \inferrule
+  { }
+  {Γ ⊢ []  \ifrtype }
+
+  \ru{inf-fin-form}
+  \inferrule
+  { }
+  {Γ ⊢ \{`l_0 … `l_n \} \ifrtype }
+
+  \ru{inf-meet-form}
+  \inferrule
+  {Γ ⊢ A \ifrtype \\ Γ ⊢ B \ifrtype }
+  {Γ ⊢ A ∧ B \ifrtype}
+
+  \ru{inf-join-form}
+  \inferrule
+  {Γ ⊢ A \ifrtype \\ Γ ⊢ B \ifrtype }
+  {Γ ⊢ A ∨ B \ifrtype}
+ 
 \end{mathpar}
 
 \begin{theorem}
-  The relations $Γ ⊢ t \chk A$ and  $Γ ⊢ t \ifr A$  are decidable.
+  If $Γ ⊢ t \chk V$, then $\eval t ρ$ terminates. [FIXME: this isn't
+  true for records. Because of subtyping we will not check that
+  certain fields are well typed, and those can thus
+  diverge. Fortunately, such fields cannot be accessed (thanks to
+  typing). Thus, if the evaluation is lazy, it will terminate in all
+  allowed cases.]
+\end{theorem}
+\begin{proof}
+  (idea) The case which could go wrong (application) is saved by types
+  becoming smaller.
+\end{proof}
+\begin{theorem}
+Convertibility and subtyping are decidable relations
+\end{theorem}
+
+
+\begin{theorem}
+  The relations $Γ ⊢ t \chk V$ and  $Γ ⊢ t \ifr V$  are decidable.
 \end{theorem}
 \begin{proof}
   The relations are structural over the proof terms. (Except for the
@@ -447,8 +534,8 @@ a non-inferrable term, then an annotation is added.
 
 \begin{theorem}~
   \begin{itemize}
-  \item if $Γ ⊢ t : A$ then $Γ ⊢ \trn t \chk A$.
-  \item if $Γ ⊢ t : A$ then $Γ ⊢ \trp t \ifr B$ and $B ⊑ A$.
+  \item if $Γ ⊢ t : A$ then $Γ ⊢ \trn t \chk \eval A Γ$.
+  \item if $Γ ⊢ t : A$ then $Γ ⊢ \trp t \ifr W$ and $W ⊑ \eval A Γ$.
   \end{itemize}
 \end{theorem}
 \begin{proof}
@@ -456,7 +543,7 @@ a non-inferrable term, then an annotation is added.
 \end{proof}
 
 \begin{theorem}
-  if $Γ ⊢ t \chk A$ then $Γ ⊢  t : A$.
+  if $Γ ⊢ t \chk \eval A Γ$ then $Γ ⊢  t : A$.
 \end{theorem}
 \begin{proof}
   By erasing the type annotations in the proof term.
@@ -477,36 +564,37 @@ Typing:
 \begin{mathpar}
   \ru{check-rec-elim}
   \inferrule
-  {Γ ⊢ t \chk [x : A]  }
-  {Γ ⊢ t.x \chk A  }
+  {Γ ⊢ t \chk [l : V]  }
+  {Γ ⊢ t.l \chk V  }
 
  \ru{inf-fin-elim}
  \inferrule
-  {Γ ⊢ t_i \ifr A_i  }
-  {Γ ⊢ \splt {`l_i ↦ t_i, …} \ifr (x : \fin { `l_i }) → ⋀_i A_i[x/`l, …_i] }
+  {Γ ⊢ t_i \ifr V_i  }
+  {Γ ⊢ \splt {`l_i ↦ t_i, …} \ifr Π \fin { `l_i } ⋀_i V_i }
 \end{mathpar}
 
-Evaluation for meet and join:
+Simplification equations for meet and join (to use during evaluation):
 \begin{align*}
-  ((x:A) → B) ∧ ((x:A') → B') &= (x:A ∨ A') → (B ∧ B') \\
-  [\vec f] ∧ [\vec f']                  &= [\vec f ∧ \vec f'] \\
-  ─ ∧ \vec f       &= \vec f \\
-  (l:A;\vec f) ∧ \vec f'       &= l:A;(\vec f ∧ \vec f')  & x ∉ \vec f' \\
-  (l:A;\vec f) ∧ (l:A';\vec f')       &= l:(A ∧ A');(\vec f ∧ \vec f') \\
-  \{ \vec t \} ∧ \{ \vec t' \} & = \{ \vec t ∩ \vec t' \} \\
-  A ∧ A & = A \\
-  A ∧ B & = ⊥ & \text {otherwise and if neither $A$ or $B$ is neutral.} \\
+  (Π V W) ∧ (Π V' W') &= Π (V ∨ V') (ΛX. \app W X ∧ \app {W'} X) \\
+  [] ∧ V       &= V \\
+  ⊥ ∧ V       &= ⊥ \\
+  [l:V;W] ∧ [l:V';W']  &= [l:(V ∧ V');(\app W X ∧ \app {W'} X)] \\
+  [l:V;W] ∧ [W']       &= [l:V;\app W X ∧ W']   \\
+  \{ l_i \} ∧ \{ l'_i \} & = \{ l_i \} ∩ \{ l'_i \} \\
+  V ∧ V & = V \\
+  V ∧ W & = ⊥ & \text {otherwise and if neither $A$ or $B$ is neutral.} \\
 \end{align*}
-\begin{align*}
-  ((x:A) → B) ∨ ((x:A') → B') &= (x:A ∧ A') → (B ∨ B') \\
-  [\vec f] ∨ [\vec f']                  &= [\vec f ∨ \vec f'] \\
-  ─ ∨ \vec f       &= ─ \\
-  (l:A;\vec f) ∨ \vec f'       &= (\vec f ∨ \vec f')  & x ∉ \vec f' \\
-  (l:A;\vec f) ∨ (l:A';\vec f')       &= l:(A ∨ A');(\vec f ∨ \vec f') \\
-  \{ \vec t \} ∨ \{ \vec t' \} & = \{ \vec t ∪ \vec t' \} \\
-  A ∨ A & = A \\
-  A ∨ B & = [] & \text {otherwise and if neither $A$ or $B$ is neutral.}
-\end{align*}
+(symmetrically for join)
+% \begin{align*}
+%   ((x:A) → B) ∨ ((x:A') → B') &= (x:A ∧ A') → (B ∨ B') \\
+%   [\vec f] ∨ [\vec f']                  &= [\vec f ∨ \vec f'] \\
+%   ─ ∨ \vec f       &= ─ \\
+%   (l:A;\vec f) ∨ \vec f'       &= (\vec f ∨ \vec f')  & x ∉ \vec f' \\
+%   (l:A;\vec f) ∨ (l:A';\vec f')       &= l:(A ∨ A');(\vec f ∨ \vec f') \\
+%   \{ \vec t \} ∨ \{ \vec t' \} & = \{ \vec t ∪ \vec t' \} \\
+%   A ∨ A & = A \\
+%   A ∨ B & = [] & \text {otherwise and if neither $A$ or $B$ is neutral.}
+% \end{align*}
 
 % Perhaps have a parallel execution as the introductor of meet?
 % (t|u) : A ∧ B
