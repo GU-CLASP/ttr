@@ -419,7 +419,7 @@ Inference rules:
   \ru{inf-pi-elim}
   \inferrule
   {Γ ⊢ t \ifr Π V W \\ Γ ⊢ u \chk V }
-  {Γ ⊢ t u \ifr \app W {\eval t Γ} }
+  {Γ ⊢ t u \ifr \app W {\eval u Γ} }
 
  \ru{inf-rec-elim}
  \inferrule
@@ -479,16 +479,12 @@ Inference rules:
 \end{mathpar}
 
 \begin{theorem}
-  If $Γ ⊢ t \chk V$, then $\eval t ρ$ terminates. [FIXME: this isn't
-  true for records. Because of subtyping we will not check that
-  certain fields are well typed, and those can thus
-  diverge. Fortunately, such fields cannot be accessed (thanks to
-  typing). Thus, if the evaluation is lazy, it will terminate in all
-  allowed cases.]
+  If $Γ ⊢ t \chk V$, then $\eval t ρ$ terminates.
 \end{theorem}
 \begin{proof}
-  (idea) The case which could go wrong (application) is saved by types
-  becoming smaller.
+  (idea) By induction on the typing derivation. [Note: Agda is
+  sufficiently clever to see that the process terminates; see
+  Kiplingesque.agda]
 \end{proof}
 \begin{theorem}
 Convertibility and subtyping are decidable relations
