@@ -85,6 +85,7 @@ mkWheres (d:ds) e = Where (mkWheres ds e) d
 -- | Values
 
 data VTele = VEmpty | VBind Ident Val (Val -> VTele)
+           | VBot -- Hack!
 
 data Val = VU
          | Ter Ter Env

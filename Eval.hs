@@ -36,8 +36,8 @@ eval _ (Undef _)       = error "undefined (2)"
 eval _ (Real r)        = VPrim (toDyn r) (show r)
 eval _ (Prim ('#':nm)) = VAbstract nm
 eval _ (Prim nm)       = lkPrim nm
-eval e (Meet t u)      = VMeet (eval e t) (eval e u)
-eval e (Join t u)      = VJoin (eval e t) (eval e u)
+eval e (Meet t u)      = vMeet (eval e t) (eval e u)
+eval e (Join t u)      = vJoin (eval e t) (eval e u)
 
 abstract :: String -> [Val] -> Val
 abstract x = foldl app (VAbstract x)
@@ -96,6 +96,37 @@ evalTele :: Env -> Tele -> VTele
 evalTele _ [] = VEmpty
 evalTele e (((x,l),t):ts) = VBind x t' (\x' -> evalTele (Pair e ((x,l),x')) ts)
   where t' = eval e t
+
+vJoin :: Val -> Val -> Val
+vJoin = VJoin
+
+vMeet :: Val -> Val -> Val
+vMeet (VRecordT fs) (VRecordT fs') | botTele x = VMeet (VRecordT fs) (VRecordT fs')
+                                   | otherwise = VRecordT x
+  where x = meetFields fs fs'
+vMeet x y = VMeet x y
+
+hasField :: String -> VTele -> Bool
+hasField _ VEmpty = False
+hasField l (VBind l' _ t) = l == l' || hasField l (t (error "hasField: cannot look at values!"))
+
+lacksField :: String -> VTele -> Bool
+lacksField l fs = not (hasField l fs)
+
+botTele :: VTele -> Bool
+botTele VEmpty = False
+botTele VBot = True
+botTele  (VBind _ _ t) = botTele (t (error "botTele: cannot look at values!"))
+
+meetFields :: VTele -> VTele -> VTele
+meetFields VEmpty fs = fs
+meetFields fs VEmpty = fs
+meetFields fs@(VBind l a t) fs'@(VBind l' a' t')
+  | l == l' = VBind l (vMeet a a') (\x -> meetFields (t x) (t' x))
+  | lacksField l' fs  = VBind l' a' (\x -> meetFields fs (t' x))
+  | lacksField l  fs' = VBind l  a  (\x -> meetFields fs' (t x))
+  | otherwise = VBot
+
 
 app :: Val -> Val -> Val
 app (VLam f) u = f u
@@ -159,7 +190,7 @@ conv k (VPi u v) (VPi u' v') = do
   let w = mkVar k
   conv k u' u  <> conv (k+1) (app v w) (app v' w)
 conv k (VRecordT fs) (VRecordT fs') = 
-  convTele False k fs fs'
+  convTele k fs fs'
 conv k (VProj l u) (VProj l' u') = equal l l' <> conv k u u'
 conv k (VCon c us) (VCon c' us') =
   (c `equal` c') <> mconcat (zipWith (conv k) us us')
@@ -177,12 +208,12 @@ sub _ VU VU = Nothing
 sub k (VPi u v) (VPi u' v') = do
   let w = mkVar k
   conv k u' u  <> sub (k+1) (app v w) (app v' w)
-sub k (VRecordT fs) (VRecordT fs') = convTele True k fs fs'
+sub k (VRecordT fs) (VRecordT fs') = subTele k fs fs'
 sub k (VJoin a b) c = sub k a c <> sub k b c
 sub k (VMeet a b) c = sub k a c `orElse` sub k b c
 sub k c (VJoin a b) = sub k c a `orElse` sub k c b
 sub k c (VMeet a b) = sub k c a <> sub k c b
-sub k x              x'           = conv k x x'
+sub k x x' = conv k x x'
 
 orElse Nothing _ = Nothing
 orElse _ Nothing = Nothing
@@ -191,13 +222,24 @@ orElse (Just x) (Just y) = Just (x <> " and " <> y)
 convEnv :: Int -> Env -> Env -> Maybe String
 convEnv k e e' = mconcat $ zipWith (conv k) (valOfEnv e) (valOfEnv e')
 
-convTele :: Bool -> Int -> VTele -> VTele -> Maybe String
-convTele True _ _ VEmpty = Nothing
-convTele _ _ VEmpty VEmpty = Nothing
-convTele subp k (VBind l a t) (VBind l' a' t') = do
+convTele :: Int -> VTele -> VTele -> Maybe String
+convTele _ VEmpty VEmpty = Nothing
+convTele k (VBind l a t) (VBind l' a' t') = do
   let v = mkVar k
-  equal l l' <> (if subp then sub else conv) k a a' <> convTele subp (k+1) (t v) (t' v)
-convTele subp _ x x' = (if subp then noSub else different) x x'
+  equal l l' <> conv k a a' <> convTele (k+1) (t v) (t' v)
+convTele _ x x' = different x x'
+
+subTele :: Int -> VTele -> VTele -> Maybe String
+subTele _ _ VEmpty = Nothing  -- all records are a subrecord of the empty record
+subTele k (VBind l a t) (VBind l' a' t') = do
+  let v = mkVar k
+  if l == l'
+    then sub k a a' <> subTele (k+1) (t v) (t' v)
+    else subTele (k+1) (VBind l a t) (t' v)
+subTele _ x x' = noSub x x'
+-- FIXME: Subtyping of records isn't complete. To be complete, one
+-- would have to create a graph representation of the dependencies in
+-- a record, and then check the covering of the graphs.
 
 convFields :: Int -> [(String,Val)] -> [(String,Val)] -> Maybe String
 convFields _ [] [] = Nothing
