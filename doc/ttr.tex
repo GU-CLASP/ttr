@@ -63,7 +63,7 @@ algorithm for an intuitionistic type-theory. The goal is to capture
 Cooper's TTR.
 \subsection*{Syntax}
 The syntax for type and proof terms is as follow. Note in particular
-that, because we have dependent types, the syntaxes of types and proof
+that, as customary for Russel-style dependent-types, the syntaxes of types and proof
 terms are unified.
 \begin{align*}
   t,u,A,B & ::=  x \\
@@ -204,7 +204,8 @@ rules takes care of those types. See in particular the subtyping
 relation below.
 
 In the \ru{sub} rule we write $\eval A Γ$ to mean
-$\eval A {[x_i↦X_i, ∀ x_i:C_i ∈ Γ]}$ (see evaluation below).
+$\eval A {[x_i↦X_i, ∀ x_i:C_i ∈ Γ]}$ (see evaluation below) --- that
+is, every variable is substituted for an unknown value.
 
 
 \subsection*{Values}
@@ -482,12 +483,34 @@ Inference rules:
   If $Γ ⊢ t \chk V$, then $\eval t ρ$ terminates.
 \end{theorem}
 \begin{proof}
-  (idea) By induction on the typing derivation. [Note: Agda is
-  sufficiently clever to see that the process terminates; see
-  Kiplingesque.agda]
+  We first observe that
+  \begin{itemize}
+  \item The type is already evaluated
+  \item The term has a correct type
+  \end{itemize}
+  This allows to build a sound model for our theory into a language of
+  total functions. In the interest of economy, we will map it to
+  another type-theory, say Agda. Then:
+  \begin{itemize}
+  \item Interpreting values into Agda is obviously terminating, as no
+    reduction can take place. We can call this function El : Type ->
+    Set. (Where Set is an Agda Set). This function can be extended to
+    contexts in a usual way, and called Env.
+
+    Because the syntax and the semantics are so close, the
+    interpretation is straightforward. The noteworthy bit is that
+    union types are interpreted to disjoint unions, and intersection
+    types as simple products.
+  \item If $V ⊑ W$, then we can construct a function $El V → El W$.
+  \item We can then define evaluation in Agda as a follows:
+    $(ρ : Env Γ) → (t : Term) → Γ ⊢ t \chk V → V$. Erasing the last
+    argument yields our evaluation function.
+  \end{itemize}
+
 \end{proof}
+
 \begin{theorem}
-Convertibility and subtyping are decidable relations
+Convertibility and subtyping are decidable relations.
 \end{theorem}
 
 
