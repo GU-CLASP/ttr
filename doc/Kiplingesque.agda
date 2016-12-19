@@ -17,15 +17,28 @@ mutual
   El (S `∧ T) = El S × El T
   El (S `∨ T) = El S ⊎ El T
 
-data _⊑_ : U -> U -> Set where
-  meetL : ∀ {S S' T} -> S ⊑ T -> (S `∧ S') ⊑ T
-  joinL : ∀ {S S' T} -> S ⊑ T -> S' ⊑ T -> (S `∨ S') ⊑ T
-  -- etc.
+mutual
+  data _⊑_ : U -> U -> Set where
+    meetL1 : ∀ {S S' T} -> S ⊑ T -> (S `∧ S') ⊑ T
+    meetL2 : ∀ {S S' T} -> S' ⊑ T -> (S `∧ S') ⊑ T
+    meetR : ∀ {S T T'} -> S ⊑ T -> S ⊑ T' -> S ⊑ (T `∧ T')
+    joinL : ∀ {S S' T} -> S ⊑ T -> S' ⊑ T -> (S `∨ S') ⊑ T
+    joinR1 : ∀ {S T T'} -> S ⊑ T -> S ⊑ (T `∨ T')
+    joinR2 : ∀ {S T T'} -> S ⊑ T' -> S ⊑ (T `∨ T')
+    sub-> : ∀ {V W V' W'} -> (p : V' ⊑ V) -> (∀ x -> (W (convert p x) ⊑ W' x)) -> (`Π V W) ⊑ (`Π V' W')
+    sub-refl : ∀ {V} -> V ⊑ V
+    -- etc.
 
-convert : ∀ {A B} -> A ⊑ B -> El A -> El B
-convert (meetL p) (x , _) = convert p x
-convert (joinL p q) (inj₁ x) = convert p x
-convert (joinL p q) (inj₂ y) = convert q y
+  convert : ∀ {A B} -> A ⊑ B -> El A -> El B
+  convert (meetL1 p) (x , _) = convert p x
+  convert (meetL2 p) (_ , x) = convert p x
+  convert (meetR p q) x = (convert p x) , (convert q x)
+  convert (joinL p q) (inj₁ x) = convert p x
+  convert (joinL p q) (inj₂ y) = convert q y
+  convert (joinR1 p) x = inj₁ (convert p x)
+  convert (joinR2 p) x = inj₂ (convert p x)
+  convert (sub-> p q) f = \x -> convert (q x) (f (convert p x ))
+  convert (sub-refl) x = x
 
 mutual
   data Cx : Set where
