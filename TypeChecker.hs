@@ -105,7 +105,7 @@ getLblType c (Ter (Sum _ cas) r) = case getIdent c cas of
   Just as -> return (as,r)
   Nothing -> oops ("getLblType" <+> pretty c)
 getLblType c u = oops (sep ["expected a data type for the constructor",
-                             pretty c,"but got",pretty u])
+                              pretty c,"but got",pretty u])
 
 -- Useful monadic versions of functions:
 localM :: (TEnv -> Typing TEnv) -> Typing a -> Typing a
@@ -192,7 +192,6 @@ checkSub msg a v = do
 checkBranch :: (Tele,Env) -> Val -> Brc -> Typing ()
 checkBranch (xas,nu) f (c,(xs,e)) = do
   k   <- asks index
-  env <- asks env
   let l  = length xas
       us = map mkVar [k..k+l-1]
   localM (addBranch (zip xs us) (xas,nu)) $ check (app f (VCon c us)) e

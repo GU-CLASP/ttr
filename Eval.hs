@@ -259,20 +259,20 @@ showVal t0 = case t0 of
   VU            -> "Type"
   (VJoin u v)  -> pretty u <+> "\\/" <+> pretty v
   (VMeet u v)  -> pretty u <+> "/\\" <+> pretty v
-  (Ter t env)  -> pretty t <+> pretty env
+  (Ter t env)  -> hang 2 (pretty t) (pretty env)
   (VCon c us)  -> pretty c <+> showVals us
   (VPi a f)    ->
     do s <- getSupply      -- "Pi" <+> svs [a,f]
-       parens (pretty s <> ":" <> pretty a) <+> "->" <+> pretty (app f (VVar s))
-  (VApp u v)   -> sv u <+> sv1 v
+       parens (pretty s <> ":" <> pretty a) <+> "->" </> pretty (app f (VVar s))
+  (VApp u v)   -> hang 2 (sv u) (sv1 v)
   (VSplit u v) -> sv u <+> sv1 v
   (VVar x)     -> pretty x
-  (VRecordT tele) -> "[" <+> pretty tele <+>  "]"
-  (VRecord fs)   -> "(" <> hcat [pretty l <> " = " <> showVal e | (l,e) <- fs] <> ")"
+  (VRecordT tele) -> "[" <> pretty tele <> "]"
+  (VRecord fs)   -> tupled [pretty l <+> "=" <+> showVal e | (l,e) <- fs]
   (VProj f u)     -> sv u <> "." <> pretty f
   (VLam f)  -> do
     s <- getSupply
-    "\\" <> pretty s <> " -> " <+> showVal (f $ VVar s)
+    ("\\" <> pretty s <+> "->") </> showVal (f $ VVar s)
   (VPrim _ nm) -> pretty nm
   (VAbstract nm) -> pretty ('#':nm)
  where sv = showVal
@@ -280,10 +280,10 @@ showVal t0 = case t0 of
        svs = showVals
 
 showVals :: [Val] -> D
-showVals = hcat . map showVal1
+showVals = sep . map showVal1
 
 showVal1 :: Val -> D
-showVal1 VU          = "U"
+showVal1 VU          = "Type"
 showVal1 (VCon c []) = pretty c
 showVal1 u@(VVar{})  = showVal u
 showVal1 u           = parens $ showVal u
@@ -291,12 +291,19 @@ showVal1 u           = parens $ showVal u
 instance Show Val where
   show = render . showVal
 
+prettyTele :: VTele -> [D]
+prettyTele VEmpty = []
+prettyTele (VBind nm ty rest) = (pretty nm <+> ":" <+> showVal ty <> ";") : prettyTele (rest $ VVar nm)
+
 instance Pretty VTele where
-  pretty VEmpty = ""
-  pretty (VBind nm ty rest) = (pretty nm <> ":" <> showVal ty <> ";") <> pretty (rest $ VVar nm)
+  pretty = sep . prettyTele
 
 instance Pretty Env where
-  pretty e0 = case e0 of
-    Empty            -> ""
-    (PDef _xas env)   -> pretty env
-    (Pair env ((x,_),u)) -> pretty env <> ", " <> pretty (x,u)
+  -- pretty e = brackets (sep (reverse (showEnv e)))
+  pretty e = encloseSep "[" "]" ";" $ reverse (showEnv e)
+
+showEnv :: Env -> [D]
+showEnv e0 = case e0 of
+    Empty            -> []
+    (PDef _xas env)   -> showEnv env
+    (Pair env ((x,_),u)) -> (pretty x <> ":" <> pretty u <> ";") : showEnv env

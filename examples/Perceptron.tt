@@ -3,7 +3,7 @@ module Perceptron where
 import Lists
 import Reals
 
-Ind : U
+Ind : Type
 Ind = primitive "#Ind"
 
 kappa : [w : List Real;

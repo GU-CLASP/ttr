@@ -2,7 +2,7 @@
 module Main where
 
 import Control.Monad.Trans.Reader
-import Control.Monad.Error
+import Control.Monad.Except
 import Data.List
 import System.Directory
 import System.FilePath hiding ((</>))
@@ -124,7 +124,7 @@ loop flags f names tenv@(TC.TEnv _ rho _ _ _) = do
             Right typ  -> do
               outputStrLn (render ("TYPE:" </> pretty typ))
               let e = E.eval rho body
-              outputStrLn (render ("EVAL:" </> pretty e))
+              liftIO $ putStrLn (render ("EVAL:" </> pretty e))
               loop flags f names tenv
 
 -- (not ok,loaded,already loaded defs) -> to load ->

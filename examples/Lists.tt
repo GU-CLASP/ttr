@@ -1,9 +1,9 @@
 module Lists where
 
-List : U -> U
+List : Type -> Type
 data List a = nil | cons (head : a) (tail : List a)
 
-zipWith : (a b c : U) -> (a -> b -> c) -> List a -> List b -> List c
+zipWith : (a b c : Type) -> (a -> b -> c) -> List a -> List b -> List c
 zipWith a b c f = zip'
   where
     zip' : List a -> List b -> List c
@@ -14,7 +14,7 @@ zipWith a b c f = zip'
         cons y ys -> cons (f x y) (zip' xs ys)
 
 
-foldr : (a b : U) -> List a -> (a -> b -> b) -> b -> b
+foldr : (a b : Type) -> List a -> (a -> b -> b) -> b -> b
 foldr a b xs f k = go xs
   where go : List a -> b
         go = split

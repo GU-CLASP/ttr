@@ -1,1 +1,4 @@
-external-repos: {}
+nix-repos:
+  pretty-compact:
+    location: https://github.com/jyp/prettiest.git
+

@@ -23,9 +23,13 @@ getSupply = do
 (<+>) :: D -> D -> D
 (<+>)  = liftM2 (PC.<+>)
 
+(<|>) :: D -> D -> D
+(<|>)  = liftM2 (PC.<|>)
+
 ($$) :: D -> D -> D
 ($$)  = liftM2 (PC.$$)
-x </> y  = Pretty.sep [x,y]
+
+x </> y  = Pretty.hsep [x,y]
 
 infixr 6 <+>
 
@@ -50,6 +54,8 @@ showy = fromString . show
 
 parens :: D -> D
 parens = liftM PC.parens
+brackets :: D -> D
+brackets = liftM PC.brackets
 
 hcat :: [D] -> D
 hcat xs = PC.hcat <$> (sequence xs)
@@ -57,10 +63,27 @@ hcat xs = PC.hcat <$> (sequence xs)
 vcat :: [D] -> D
 vcat xs = PC.vcat <$> (sequence xs)
 
+list :: [D] -> D
 list xs = PC.list <$> (sequence xs)
 
-sep xs = PC.sep <$> (sequence xs)
+-- tupled :: [D] -> D
+-- tupled xs = PC.tupled <$> (sequence xs)
 
+tupled :: [D] -> D
+tupled xs = PC.tupled <$> (sequence xs)
+
+encloseSep :: D -> D -> D -> [D] -> D
+encloseSep left right sp ds = PC.encloseSep <$> left <*> right <*> sp <*> sequence ds
+
+hang :: Int -> D -> D -> D
+hang n x y = PC.hang n <$> x <*> y
+
+
+hsep :: [D] -> D
+hsep xs = PC.hsep <$> (sequence xs)
+
+sep :: [D] -> D
+sep xs = PC.sep <$> (sequence xs)
 
 instance Pretty Int where
   pretty = showy
