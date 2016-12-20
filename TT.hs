@@ -121,14 +121,6 @@ isNeutral _            = False
 data Env = Empty
          | Pair Env (Binder,Val)
          | PDef [(Binder,Ter)] Env
-  deriving (Show)
-  
-instance Pretty Env where
-  pretty e0 = case e0 of
-    Empty            -> ""
-    (PDef _xas env)   -> pretty env
-    (Pair env ((x,_),u)) -> pretty env <> ", " <> pretty (x,u)
-
 
 upds :: Env -> [(Binder,Val)] -> Env
 upds = foldl Pair
@@ -150,15 +142,12 @@ valOfEnv (Pair env (_,v)) = v : valOfEnv env
 instance Show Loc where
   show (Loc name (i,j)) = name ++ "_L" ++ show i ++ "_C" ++ show j
 
-instance Show Ter where
-  show = runD . showTer
-
 instance Pretty Ter where
   pretty = showTer
 
 showTele :: Tele -> D
 showTele [] = mempty
-showTele (((x,_loc),t):tele) = (return x <> " : " <> showTer t <> ";") $$ showTele tele
+showTele (((x,_loc),t):tele) = (pretty x <> " : " <> showTer t <> ";") $$ showTele tele
 
 showTer :: Ter -> D
 showTer U             = "U"
@@ -166,73 +155,37 @@ showTer (Meet e0 e1)  = showTer e0 <+> "/\\" <+> showTer e1
 showTer (Join e0 e1)  = showTer e0 <+> "\\/" <+> showTer e1
 showTer (App e0 e1)   = showTer e0 <+> showTer1 e1
 showTer (Pi e0 e1)    = "Pi" <+> showTers [e0,e1]
-showTer (Lam (x,_) e) = "\\" <> return x <+> "->" <+> showTer e
-showTer (Proj l e)       = showTer e <> "." <> return l
+showTer (Lam (x,_) e) = "\\" <> pretty x <+> "->" <+> showTer e
+showTer (Proj l e)       = showTer e <> "." <> pretty l
 showTer (RecordT ts)  = "[" <> showTele ts <> "]"
-showTer (Record fs)   = "(" <> hcat [return l <> " = " <> showTer e | (l,e) <- fs] <> ")"
+showTer (Record fs)   = "(" <> hcat [pretty l <> " = " <> showTer e | (l,e) <- fs] <> ")"
 showTer (Where e d)   = showTer e <+> "where" <+> showDecls d
-showTer (Var x)       = return x
-showTer (Con c es)    = return c <+> showTers es
-showTer (Split l _)   = "split " <> return (show l)
-showTer (Sum l _)     = "sum " <> return (show l)
+showTer (Var x)       = pretty x
+showTer (Con c es)    = pretty c <+> showTers es
+showTer (Split l _)   = "split " <> pretty l
+showTer (Sum l _)     = "sum " <> pretty l
 showTer (Undef _)     = "undefined (1)"
 showTer (Real r)      = showy r
 showTer (Prim n)      = showy n
+
+instance Pretty Loc where
+  pretty (Loc x l) = pretty x <> "@" <> pretty l
 
 showTers :: [Ter] -> D
 showTers = hcat . map showTer1
 
 showTer1 :: Ter -> D
 showTer1 U           = "U"
-showTer1 (Con c [])  = return c
-showTer1 (Var x)     = return x
+showTer1 (Con c [])  = pretty c
+showTer1 (Var x)     = pretty x
 showTer1 u@(Split{}) = showTer u
 showTer1 u@(Sum{})   = showTer u
 showTer1 u           = parens $ showTer u
 
 showDecls :: Decls -> D
-showDecls defs = ccat (map (\((x,_),_,d) -> return x <+> "=" <+> pretty d) defs)
+showDecls defs = vcat (map (\((x,_),_,d) -> pretty x <+> "=" <+> pretty d) defs)
 
-instance Show Val where
-  show = runD . showVal
 
-instance Show VTele where
-  show = runD . pretty
+instance Show Ter where
+  show = render . pretty
 
-instance Pretty VTele where
-  pretty VEmpty = ""
-  pretty (VBind nm ty rest) = (return nm <> ":" <> showVal ty <> ";") <> pretty (rest $ VVar nm)
-
-instance Pretty Val where pretty = showVal
-
-showVal :: Val -> D
-showVal t0 = case t0 of
-  VU            -> "U"
-  (VJoin u v)  -> pretty u <+> "\\/" <+> pretty v
-  (VMeet u v)  -> pretty u <+> "/\\" <+> pretty v
-  (Ter t env)  -> pretty t <+> pretty env
-  (VCon c us)  -> pretty c <+> showVals us
-  (VPi a f)    -> "Pi" <+> svs [a,f]
-  (VApp u v)   -> sv u <+> sv1 v
-  (VSplit u v) -> sv u <+> sv1 v
-  (VVar x)     -> return x
-  (VRecordT tele) -> "[" <+> pretty tele <+>  "]"
-  (VRecord fs)   -> "(" <> hcat [return l <> " = " <> showVal e | (l,e) <- fs] <> ")"
-  (VProj f u)     -> sv u <> "." <> return f
-  (VLam f)  -> do
-    s <- getSupply
-    "\\" <> return s <> " -> " <+> showVal (f $ VVar s)
-  (VPrim _ nm) -> return nm
-  (VAbstract nm) -> return ('#':nm)
- where sv = showVal
-       sv1 = showVal1
-       svs = showVals
-
-showVals :: [Val] -> D
-showVals = hcat . map showVal1
-
-showVal1 :: Val -> D
-showVal1 VU          = "U"
-showVal1 (VCon c []) = return c
-showVal1 u@(VVar{})  = showVal u
-showVal1 u           = parens $ showVal u

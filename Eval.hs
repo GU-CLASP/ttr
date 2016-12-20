@@ -2,12 +2,15 @@
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE OverloadedStrings #-}
 module Eval where
 
+import Pretty
 import TT
 import Data.Monoid hiding (Sum)
 import Data.Dynamic
 import Prelude hiding (pi)
+import Pretty
 
 look :: Ident -> Env -> (Binder, Val)
 look x (Pair rho (n@(y,_l),u))
@@ -152,21 +155,21 @@ projVal l (VRecord fs)    = case lookup l fs of
 projVal l u | isNeutral u = VProj l u
             | otherwise   = error $ show u ++ " should be neutral"
 
-convs :: Int -> [Val] -> [Val] -> Maybe String
+convs :: Int -> [Val] -> [Val] -> Maybe D
 convs k a b = mconcat $ zipWith (conv k) a b
 
-equal :: (Show a, Eq a) => a -> a -> Maybe [Char]
+equal :: (Pretty a, Eq a) => a -> a -> Maybe D
 equal a b | a == b = Nothing
           | otherwise = different a b
 
-different :: (Show a) => a -> a -> Maybe [Char]
-different a b = Just $ show a ++ " /= " ++ show b
+different :: (Pretty a) => a -> a -> Maybe D
+different a b = Just $ sep [pretty a,"/=",pretty b]
 
-noSub :: forall a a1. (Show a1, Show a) => a -> a1 -> Maybe [Char]
-noSub a b = Just $ show a ++ " not a subtype of " ++ show b
+noSub :: (Pretty a) => a -> a -> Maybe D
+noSub a b = Just $ sep [pretty a,"not a subtype of",pretty b]
 
 -- | @conv k a b@ Checks that @a@ can be converted to @b@.
-conv :: Int -> Val -> Val -> Maybe String
+conv :: Int -> Val -> Val -> Maybe D
 conv _ VU VU = Nothing
 conv k (VLam f) (VLam g) = do
   let v = mkVar k
@@ -203,7 +206,7 @@ conv _ (VPrim _ _) (VPrim _ _) = Nothing
 conv _ x              x'           = different x x'
 
 -- @sub _ a b@: check that a is a subtype of b.
-sub :: Int -> Val -> Val -> Maybe String
+sub :: Int -> Val -> Val -> Maybe D
 sub _ VU VU = Nothing
 sub k (VPi u v) (VPi u' v') = do
   let w = mkVar k
@@ -215,21 +218,22 @@ sub k c (VJoin a b) = sub k c a `orElse` sub k c b
 sub k c (VMeet a b) = sub k c a <> sub k c b
 sub k x x' = conv k x x'
 
+orElse :: Maybe D -> Maybe D -> Maybe D
 orElse Nothing _ = Nothing
 orElse _ Nothing = Nothing
 orElse (Just x) (Just y) = Just (x <> " and " <> y)
 
-convEnv :: Int -> Env -> Env -> Maybe String
+convEnv :: Int -> Env -> Env -> Maybe D
 convEnv k e e' = mconcat $ zipWith (conv k) (valOfEnv e) (valOfEnv e')
 
-convTele :: Int -> VTele -> VTele -> Maybe String
+convTele :: Int -> VTele -> VTele -> Maybe D
 convTele _ VEmpty VEmpty = Nothing
 convTele k (VBind l a t) (VBind l' a' t') = do
   let v = mkVar k
   equal l l' <> conv k a a' <> convTele (k+1) (t v) (t' v)
 convTele _ x x' = different x x'
 
-subTele :: Int -> VTele -> VTele -> Maybe String
+subTele :: Int -> VTele -> VTele -> Maybe D
 subTele _ _ VEmpty = Nothing  -- all records are a subrecord of the empty record
 subTele k (VBind l a t) (VBind l' a' t') = do
   let v = mkVar k
@@ -241,7 +245,58 @@ subTele _ x x' = noSub x x'
 -- would have to create a graph representation of the dependencies in
 -- a record, and then check the covering of the graphs.
 
-convFields :: Int -> [(String,Val)] -> [(String,Val)] -> Maybe String
+convFields :: Int -> [(String,Val)] -> [(String,Val)] -> Maybe D
 convFields _ [] [] = Nothing
 convFields k ((l,u):fs) ((l',u'):fs') = equal l l' <> conv k u u' <> convFields k fs fs'
 convFields _ x x' = different x x'
+
+
+--------------------
+instance Pretty Val where pretty = showVal
+
+showVal :: Val -> D
+showVal t0 = case t0 of
+  VU            -> "Type"
+  (VJoin u v)  -> pretty u <+> "\\/" <+> pretty v
+  (VMeet u v)  -> pretty u <+> "/\\" <+> pretty v
+  (Ter t env)  -> pretty t <+> pretty env
+  (VCon c us)  -> pretty c <+> showVals us
+  (VPi a f)    ->
+    do s <- getSupply      -- "Pi" <+> svs [a,f]
+       parens (pretty s <> ":" <> pretty a) <+> "->" <+> pretty (app f (VVar s))
+  (VApp u v)   -> sv u <+> sv1 v
+  (VSplit u v) -> sv u <+> sv1 v
+  (VVar x)     -> pretty x
+  (VRecordT tele) -> "[" <+> pretty tele <+>  "]"
+  (VRecord fs)   -> "(" <> hcat [pretty l <> " = " <> showVal e | (l,e) <- fs] <> ")"
+  (VProj f u)     -> sv u <> "." <> pretty f
+  (VLam f)  -> do
+    s <- getSupply
+    "\\" <> pretty s <> " -> " <+> showVal (f $ VVar s)
+  (VPrim _ nm) -> pretty nm
+  (VAbstract nm) -> pretty ('#':nm)
+ where sv = showVal
+       sv1 = showVal1
+       svs = showVals
+
+showVals :: [Val] -> D
+showVals = hcat . map showVal1
+
+showVal1 :: Val -> D
+showVal1 VU          = "U"
+showVal1 (VCon c []) = pretty c
+showVal1 u@(VVar{})  = showVal u
+showVal1 u           = parens $ showVal u
+
+instance Show Val where
+  show = render . showVal
+
+instance Pretty VTele where
+  pretty VEmpty = ""
+  pretty (VBind nm ty rest) = (pretty nm <> ":" <> showVal ty <> ";") <> pretty (rest $ VVar nm)
+
+instance Pretty Env where
+  pretty e0 = case e0 of
+    Empty            -> ""
+    (PDef _xas env)   -> pretty env
+    (Pair env ((x,_),u)) -> pretty env <> ", " <> pretty (x,u)

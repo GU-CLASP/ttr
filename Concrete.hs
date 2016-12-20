@@ -9,8 +9,8 @@ import Pretty
 
 import Control.Arrow (second)
 import Control.Monad.Trans.Reader
-import Control.Monad.Trans.Error hiding (throwError)
-import Control.Monad.Error (throwError)
+import Control.Monad.Trans.Except hiding (throwError)
+import Control.Monad.Except (throwError)
 import Control.Monad (when)
 import Data.Functor.Identity
 import Data.List (nub,find,(\\))
@@ -59,7 +59,7 @@ pseudoTele (PseudoTDecl exp typ : pd) = do
     return $ map (,typ) ids ++ pt
 
 
-err = throwError . runD
+err = throwError
 -------------------------------------------------------------------------------
 -- | Resolver and environment
 
@@ -73,13 +73,13 @@ data Env = Env { envModule :: String,
                  variables :: [(C.Binder,SymKind)] }
   deriving (Eq, Show)
 
-type Resolver a = ReaderT Env (ErrorT String Identity) a
+type Resolver a = ReaderT Env (ExceptT D Identity) a
 
 emptyEnv :: Env
 emptyEnv = Env "" []
 
-runResolver :: Resolver a -> Either String a
-runResolver x = runIdentity $ runErrorT $ runReaderT x emptyEnv
+runResolver :: Resolver a -> Either D a
+runResolver x = runIdentity $ runExceptT $ runReaderT x emptyEnv
 
 updateModule :: String -> Env -> Env
 updateModule modu e = e {envModule = modu}
@@ -134,9 +134,9 @@ resolveVar (AIdent (l,x))
     case C.getIdent x vars of
       Just Variable        -> return $ C.Var x
       Just (Constructor a) -> expandConstr a x []
-      _ -> throwError $ runD $ 
-        "Cannot resolve variable" <+> return x <+> "at position" <+>
-        return (show l) <+> "in module" <+> return modName
+      _ -> throwError $ 
+        "Cannot resolve variable" <+> pretty x <+> "at position" <+>
+        pretty l <+> "in module" <+> pretty modName
 
 lam :: AIdent -> Resolver Ter -> Resolver Ter
 lam a e = do x <- resolveBinder a; C.Lam x <$> local (insertVar x) e
@@ -219,7 +219,7 @@ resolveDDecl (DeclDef  (AIdent (_,n)) args body) =
   (n,) <$> lams args (resolveWhere body)
 resolveDDecl (DeclData x@(AIdent (_,n)) args sum) =
   (n,) <$> (lams args (C.Sum <$> resolveBinder x <*> mapM resolveLabel sum))
-resolveDDecl d = err $ "Definition expected" <+> return (show d)
+resolveDDecl d = err $ "Definition expected" <+> showy d
 
 -- Resolve mutual declarations (possibly one)
 resolveMutuals :: [Decl] -> Resolver (C.Decls,[(C.Binder,SymKind)])

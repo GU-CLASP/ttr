@@ -1,25 +1,22 @@
-{-# LANGUAGE PatternSynonyms, FlexibleContexts, RecordWildCards #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE PatternSynonyms, FlexibleContexts, RecordWildCards, OverloadedStrings, TypeSynonymInstances #-}
 module TypeChecker where
 
-import Data.Dynamic
-import Data.Either
 import Data.Function
 import Data.List
-import Data.Maybe
 import Data.Monoid hiding (Sum)
 import Control.Monad
 import Control.Monad.Trans
-import Control.Monad.Trans.Error hiding (throwError)
+import Control.Monad.Trans.Except hiding (throwError)
 import Control.Monad.Trans.Reader
-import Control.Monad.Error (throwError)
-import Control.Applicative
+import Control.Monad.Except
 import Pretty
 
 import TT
 import Eval
 
 -- Type checking monad
-type Typing a = ReaderT TEnv (ErrorT String IO) a
+type Typing a = ReaderT TEnv (ExceptT D IO) a
 
 -- Environment for type checker
 data TEnv = TEnv { index   :: Int   -- for de Bruijn levels
@@ -29,7 +26,6 @@ data TEnv = TEnv { index   :: Int   -- for de Bruijn levels
                  , verbose :: Bool  -- Should it be verbose and print
                                     -- what it typechecks?
                  }
-  deriving (Show)
 
 showCtxt :: Show a => [(([Char], t), a)] -> [Char]
 showCtxt ctx = intercalate ", \n" $ reverse $ [i ++ " : " ++ show v | ((i,_),v) <- ctx]
@@ -37,10 +33,15 @@ showCtxt ctx = intercalate ", \n" $ reverse $ [i ++ " : " ++ show v | ((i,_),v) 
 logg :: String -> Typing a -> Typing a
 logg x = local (\e -> e {errCtx = x:errCtx e})
 
-oops :: String -> Typing a
+-- instance Error D where
+  
+oops :: D -> Typing a
 oops msg = do
   TEnv {..} <- ask
-  throwError ("In:\n" ++ concatMap (++ ":\n") (reverse errCtx) ++ msg ++ "\n in environment" ++ show env ++ "\n in context\n" ++ showCtxt ctxt )
+  throwError $ hcat ["In: " <+> hcat (map (pretty . (++":")) (reverse errCtx)),
+                     msg,
+                     "in environment" <> pretty env,
+                     "in context" <+> pretty ctxt]
 
 verboseEnv, silentEnv :: TEnv
 verboseEnv = TEnv 0 Empty [] [] True
@@ -78,16 +79,16 @@ trace s = do
   b <- verbose <$> ask
   when b $ liftIO (putStrLn s)
 
-runTyping :: TEnv -> Typing a -> IO (Either String a)
-runTyping env t = runErrorT $ runReaderT t env
+runTyping :: TEnv -> Typing a -> IO (Either D a)
+runTyping env t = runExceptT $ runReaderT t env
 
 -- Used in the interaction loop
-runDecls :: TEnv -> Decls -> IO (Either String TEnv)
+runDecls :: TEnv -> Decls -> IO (Either D TEnv)
 runDecls tenv d = runTyping tenv $ do
   checkDecls d
   addDecls d tenv
 
-runDeclss :: TEnv -> [Decls] -> IO (Maybe String,TEnv)
+runDeclss :: TEnv -> [Decls] -> IO (Maybe D,TEnv)
 runDeclss tenv []         = return (Nothing, tenv)
 runDeclss tenv (d:ds) = do
   x <- runDecls tenv d
@@ -95,16 +96,16 @@ runDeclss tenv (d:ds) = do
     Right tenv' -> runDeclss tenv' ds
     Left s      -> return (Just s, tenv)
 
-runInfer :: TEnv -> Ter -> IO (Either String Val)
+runInfer :: TEnv -> Ter -> IO (Either D Val)
 runInfer lenv e = runTyping lenv (checkInfer e)
 
 -- Extract the type of a label as a closure
 getLblType :: String -> Val -> Typing (Tele, Env)
 getLblType c (Ter (Sum _ cas) r) = case getIdent c cas of
   Just as -> return (as,r)
-  Nothing -> oops ("getLblType " ++ show c)
-getLblType c u = oops ("expected a data type for the constructor "
-                             ++ c ++ " but got " ++ show u)
+  Nothing -> oops ("getLblType" <+> pretty c)
+getLblType c u = oops (sep ["expected a data type for the constructor",
+                             pretty c,"but got",pretty u])
 
 -- Useful monadic versions of functions:
 localM :: (TEnv -> Typing TEnv) -> Typing a -> Typing a
@@ -165,7 +166,7 @@ checkRecord :: VTele -> [(String,Ter)] -> Typing ()
 checkRecord VEmpty _ = return () -- other fields are ignored.
 checkRecord (VBind x a r) ts =
   case lookup x ts of
-    Nothing -> oops $ "type expects field " ++ show x ++ " but it can't be found in the term."
+    Nothing -> oops $ sep ["type expects field", pretty x, "but it can't be found in the term."]
     Just t -> do
       t' <- checkEval a t
       checkRecord (r t') ts
@@ -180,13 +181,13 @@ eval' t = do
   e <- asks env
   return $ eval e t
 
-checkSub :: [Char] -> Val -> Val -> ReaderT TEnv (ErrorT String IO) ()
+checkSub :: D -> Val -> Val -> Typing ()
 checkSub msg a v = do
     k <- index <$> ask
     case sub k v a of
       Nothing -> return ()
       Just err -> do
-      oops $ msg ++ " check sub: \n  " ++ show v ++ " not a subtype of " ++ show a ++ "\n because  " ++ err
+        oops $ hcat ["In" <+> msg, pretty v <> " is not a subtype of " <> pretty a, "because " <> err]
 
 checkBranch :: (Tele,Env) -> Val -> Brc -> Typing ()
 checkBranch (xas,nu) f (c,(xs,e)) = do
@@ -201,7 +202,7 @@ inferType t = do
   a <- checkInfer t
   case a of
    VU -> return a
-   _ -> oops $ show a ++ " is not a type"
+   _ -> oops $ pretty a <> " is not a type"
 
 -- | Infer the type of the argument
 checkInfer :: Ter -> Typing Val
@@ -220,7 +221,7 @@ checkInfer e = case e of
     gam <- ctxt <$> ask
     case getIdent n gam of
       Just v  -> return v
-      Nothing -> oops $ show n ++ " is not declared!"
+      Nothing -> oops $ pretty n <> " is not declared!"
   App t u -> do
     c <- checkInfer t
     case c of
@@ -229,13 +230,13 @@ checkInfer e = case e of
         rho <- asks env
         let v = eval rho u
         return $ app f v
-      _       -> oops $ show c ++ " is not a product"
+      _       -> oops $ pretty c <> " is not a product"
   Proj l t -> do
     a <- checkInfer t
     t' <- eval' t
     case a of
       VRecordT rt -> checkInferProj l t' rt
-      _          -> oops $ show a ++ " is not a record-type"
+      _          -> oops $ pretty a <> " is not a record-type"
   Meet t u -> do
     _ <- inferType t
     _ <- inferType u
@@ -247,10 +248,10 @@ checkInfer e = case e of
   Where t d -> do
     checkDecls d
     localM (addDecls d) $ checkInfer t
-  _ -> oops ("checkInfer " ++ show e)
+  _ -> oops ("checkInfer " <> pretty e)
 
 checkInferProj :: String -> {- ^ field to project-} Val -> {- ^ record value-} VTele -> {- ^ record type-} Typing Val
-checkInferProj l _ VEmpty = oops $ "field not found:" ++ l
+checkInferProj l _ VEmpty = oops $ "field not found:" <> pretty l
 checkInferProj l r (VBind x a rest)
   | x == l = return a
   | otherwise = checkInferProj l r (rest (projVal x r))
@@ -275,5 +276,5 @@ checkType :: Ter -> Typing ()
 checkType t = do
   t' <- inferType t
   case t' of
-    VU -> oops $ "type expected but got" ++ show t'
+    VU -> oops $ "type expected but got" <> pretty t'
     _ -> return ()

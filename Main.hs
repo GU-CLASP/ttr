@@ -1,17 +1,18 @@
+{-# LANGUAGE OverloadedStrings #-}
 module Main where
 
 import Control.Monad.Trans.Reader
 import Control.Monad.Error
 import Data.List
 import System.Directory
-import System.FilePath
+import System.FilePath hiding ((</>))
 import System.Environment
 import System.Console.GetOpt
 import System.Console.Haskeline
 
 import Exp.Lex
 import Exp.Par
-import Exp.Print
+import Exp.Print hiding (render)
 import Exp.Abs
 import Exp.Layout
 import Exp.ErrM
@@ -19,6 +20,7 @@ import Concrete
 import qualified TypeChecker as TC
 import qualified TT as C
 import qualified Eval as E
+import Pretty
 
 type Interpreter a = InputT IO a
 
@@ -82,12 +84,12 @@ initLoop flags f = do
   let res = runResolver $ resolveModules mods
   case res of
     Left err    -> do
-      putStrLn $ "Resolver failed: " ++ err
+      putStrLn $ render $ sep ["Resolver failed: ",err]
       runInputT (settings []) (loop flags f [] TC.verboseEnv)
     Right (adefs,names) -> do
       (merr,tenv) <- TC.runDeclss TC.verboseEnv adefs
       case merr of
-        Just err -> putStrLn $ "Type checking failed: " ++ err
+        Just err -> putStrLn $ render $ sep ["Type checking failed:",err]
         Nothing  -> return ()
       putStrLn "File loaded."
       -- Compute names for auto completion
@@ -112,17 +114,17 @@ loop flags f names tenv@(TC.TEnv _ rho _ _ _) = do
       Bad err -> outputStrLn ("Parse error: " ++ err) >> loop flags f names tenv
       Ok  exp ->
         case runResolver $ local (insertBinders names) $ resolveExp exp of
-          Left  err  -> do outputStrLn ("Resolver failed: " ++ err)
+          Left  err  -> do outputStrLn (render ("Resolver failed:" </> err))
                            loop flags f names tenv
           Right body -> do
           x <- liftIO $ TC.runInfer tenv body
           case x of
-            Left err -> do outputStrLn ("Could not type-check: " ++ err)
+            Left err -> do outputStrLn (render ("Could not type-check:" </> err))
                            loop flags f names tenv
             Right typ  -> do
-              outputStrLn ("TYPE: " ++ show typ)
+              outputStrLn (render ("TYPE:" </> pretty typ))
               let e = E.eval rho body
-              outputStrLn ("EVAL: " ++ show e)
+              outputStrLn (render ("EVAL:" </> pretty e))
               loop flags f names tenv
 
 -- (not ok,loaded,already loaded defs) -> to load ->
