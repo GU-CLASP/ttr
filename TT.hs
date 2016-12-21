@@ -10,7 +10,11 @@ import Data.Dynamic
 
 data Loc = Loc { locFile :: String
                , locPos :: (Int, Int) }
-  deriving Eq
+  deriving (Eq)
+
+instance Show Loc where
+  show (Loc name (i,j)) = name ++ "_L" ++ show i ++ "_C" ++ show j
+
 
 type Ident  = String
 type Label  = String
@@ -68,7 +72,7 @@ data Ter = App Ter Ter
          | Meet Ter Ter
          | Join Ter Ter
 
-  deriving Eq
+  deriving (Eq)
 
 mkApps :: Ter -> [Ter] -> Ter
 mkApps (Con l us) vs = Con l (us ++ vs)

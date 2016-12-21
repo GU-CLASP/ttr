@@ -22,7 +22,7 @@ type Typing a = ReaderT TEnv (ExceptT D IO) a
 data TEnv = TEnv { index   :: Int   -- for de Bruijn levels
                  , env     :: Env
                  , ctxt    :: Ctxt
-                 , errCtx  :: [String]
+                 , errCtx  :: [D]
                  , verbose :: Bool  -- Should it be verbose and print
                                     -- what it typechecks?
                  }
@@ -30,7 +30,7 @@ data TEnv = TEnv { index   :: Int   -- for de Bruijn levels
 showCtxt :: Show a => [(([Char], t), a)] -> [Char]
 showCtxt ctx = intercalate ", \n" $ reverse $ [i ++ " : " ++ show v | ((i,_),v) <- ctx]
 
-logg :: String -> Typing a -> Typing a
+logg :: D -> Typing a -> Typing a
 logg x = local (\e -> e {errCtx = x:errCtx e})
 
 -- instance Error D where
@@ -38,7 +38,7 @@ logg x = local (\e -> e {errCtx = x:errCtx e})
 oops :: D -> Typing a
 oops msg = do
   TEnv {..} <- ask
-  throwError $ hcat ["In: " <+> hcat (map (pretty . (++":")) (reverse errCtx)),
+  throwError $ hcat ["In: " <+> hcat (map ((<> ":")) (reverse errCtx)),
                      msg,
                      "in environment" <> pretty env,
                      "in context" <+> pretty ctxt]
@@ -132,7 +132,7 @@ checkTele ((x,a):xas) = do
   localM (addType (x,a)) $ checkTele xas
 
 checkLogg :: Val -> Ter -> Typing ()
-checkLogg v t = logg ("Checking that " ++ show t ++ " has type " ++ show v) $ check v t
+checkLogg v t = logg (sep ["Checking that " <> pretty t, "has type " <> pretty v]) $ check v t
 
 check :: Val -> Ter -> Typing ()
 check a t = case (a,t) of
@@ -157,7 +157,7 @@ check a t = case (a,t) of
     localM (addDecls d) $ check a e
   (_,Undef _) -> return ()
   _ -> do
-    logg ("checking that term " ++ show t ++ " has type " ++ show a) $ do
+    logg (sep ["Checking that " <> pretty t, "has type " <> pretty a]) $ do
        v <- checkInfer t
        checkSub "inferred type" a v
 

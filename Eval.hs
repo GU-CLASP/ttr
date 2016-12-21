@@ -10,7 +10,6 @@ import TT
 import Data.Monoid hiding (Sum)
 import Data.Dynamic
 import Prelude hiding (pi)
-import Pretty
 
 look :: Ident -> Env -> (Binder, Val)
 look x (Pair rho (n@(y,_l),u))
@@ -175,6 +174,12 @@ conv _ VU VU = Nothing
 conv k (VLam f) (VLam g) = do
   let v = mkVar k
   conv (k+1) (f v) (g v)
+conv k (VLam f) g = do
+  let v = mkVar k
+  conv (k+1) (f v) (app g v)
+conv k f (VLam g) = do
+  let v = mkVar k
+  conv (k+1) (app f v) (g v)
 conv k (Ter (Lam x u) e) (Ter (Lam x' u') e') = do
   let v = mkVar k
   conv (k+1) (eval (Pair e (x,v)) u) (eval (Pair e' (x',v)) u')
@@ -260,7 +265,8 @@ showVal t0 = case t0 of
   VU            -> "Type"
   (VJoin u v)  -> pretty u <+> "\\/" <+> pretty v
   (VMeet u v)  -> pretty u <+> "/\\" <+> pretty v
-  (Ter t env)  -> showTer env t
+  (Ter t env)  -> -- showy t <> pretty env
+                  showTer env t
   (VCon c us)  -> pretty c <+> showVals us
   (VPi a f)    ->
     do s <- getSupply      -- "Pi" <+> svs [a,f]
@@ -273,7 +279,7 @@ showVal t0 = case t0 of
   (VProj f u)     -> sv u <> "." <> pretty f
   (VLam f)  -> do
     s <- getSupply
-    ("\\" <> pretty s <+> "->") </> showVal (f $ VVar s)
+    hang 0 ("\\" <> pretty s <+> "->") (showVal (f $ VVar s))
   (VPrim _ nm) -> pretty nm
   (VAbstract nm) -> pretty ('#':nm)
  where sv = showVal
@@ -292,14 +298,14 @@ showVal1 u           = parens $ showVal u
 instance Show Val where
   show = render . showVal
 
-prettyLook :: Ident -> Env -> Val
+prettyLook :: Ident -> Env -> D
 prettyLook x (Pair rho (n@(y,_l),u))
-  | x == y    = u
+  | x == y    = pretty u
   | otherwise = prettyLook x rho
-prettyLook x r@(PDef es r1) = case lookupIdent x es of
-  Just (y,_)  -> VVar (fst y)
-  Nothing -> VVar x
-prettyLook _ Empty = error "panic: variable not found in env"
+prettyLook x (PDef es r1) = case lookupIdent x es of
+  Just ((y,_loc),_t)  -> pretty y --  <> "[DEF]"
+  Nothing ->   prettyLook x r1
+prettyLook x Empty = pretty x {- typically bound in a Split -}
 
 
 prettyTele :: VTele -> [D]
@@ -317,10 +323,7 @@ showEnv :: Env -> [D]
 showEnv e0 = case e0 of
     Empty            -> []
     (PDef _xas env)   -> showEnv env
-    (Pair env ((x,_),u)) -> (pretty x <> ":" <> pretty u <> ";") : showEnv env
-
-instance Show Loc where
-  show (Loc name (i,j)) = name ++ "_L" ++ show i ++ "_C" ++ show j
+    (Pair env ((x,_),u)) -> (pretty x <> "=" <> pretty u) : showEnv env
 
 instance Pretty Ter where
   pretty = showTer Empty
@@ -335,19 +338,25 @@ showTer ρ (Meet e0 e1)  = showTer ρ e0 <+> "/\\" <+> showTer ρ e1
 showTer ρ (Join e0 e1)  = showTer ρ e0 <+> "\\/" <+> showTer ρ e1
 showTer ρ (App e0 e1)   = showTer ρ e0 <+> showTer1 ρ e1
 showTer ρ (Pi e0 e1)    = "Pi" <+> showTers ρ [e0,e1]
-showTer ρ (Lam (x,_) e) = "\\" <> pretty x <+> "->" <+> showTer ρ e
+showTer ρ (Lam (x,_) e) = hang 0 ("\\" <> pretty x <+> "->") (showTer ρ e)
 showTer ρ (Proj l e)       = showTer ρ e <> "." <> pretty l
 showTer ρ (RecordT ts)  = encloseSep "[" "]" ";" (showTele ρ ts)
 showTer ρ (Record fs)   = "(" <> hcat [pretty l <> " = " <> showTer ρ e | (l,e) <- fs] <> ")"
 showTer ρ (Where e d)   = showTer ρ e <+> "where" <+> showDecls ρ d
-showTer ρ (Var x)       = showVal (prettyLook x ρ)
+showTer ρ (Var x)       =
+  -- pretty x <> pretty ρ
+  prettyLook x ρ
 showTer ρ (Con c es)    = pretty c <+> showTers ρ es
-showTer ρ (Split l _)   = "split " <> pretty l
-showTer ρ (Sum (name,_) branches) = encloseSep "{" "}" "| " (map (showBranch ρ) branches)
+showTer ρ (Split _l branches)   = hang 2 "split"  $ showSplitBranches ρ branches
+  
+showTer ρ (Sum (_name,_) branches) = encloseSep "{" "}" "| " (map (showBranch ρ) branches)
 showTer ρ (Undef _)     = "undefined (1)"
 showTer ρ (Real r)      = showy r
 showTer ρ (Prim n)      = showy n
 
+showSplitBranches ρ branches = encloseSep "{" "}" ";"
+  [hang 2 (pretty l <+> sep (map (pretty . fst) bnds) <+> "↦") (showTer ρ t)  | (l,(bnds,t)) <- branches]
+  
 showBranch :: Env -> (Binder, Tele) -> D
 showBranch env ((b,_),tele) = pretty b <+> sep (map parens (showTele env tele))
 instance Pretty Loc where
@@ -359,7 +368,7 @@ showTers ρ = hcat . map (showTer1 ρ)
 showTer1 :: Env -> Ter -> D
 showTer1 _ρ U           = "U"
 showTer1 _ρ (Con c [])  = pretty c
-showTer1 _ρ (Var x)     = pretty x
+showTer1 ρ (Var x)     = prettyLook x ρ
 showTer1 ρ u@(Split{}) = showTer ρ u
 showTer1 ρ u@(Sum{})   = showTer ρ u
 showTer1 ρ u           = parens $ showTer ρ u
@@ -369,8 +378,4 @@ showDecl ρ (b,typ,ter) = vcat [pretty b <+> ":" <+> showTer ρ typ,
                                pretty b <+> "=" <+> showTer ρ ter]
 showDecls :: Env -> Decls -> D
 showDecls ρ defs = vcat (map (showDecl ρ) defs)
-
-
-instance Show Ter where
-  show = render . pretty
 
