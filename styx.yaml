@@ -1,4 +1,8 @@
-nix-repos:
+local-packages:
+  ttr:
+    location: .
+
+source-deps:
   pretty-compact:
     location: https://github.com/jyp/prettiest.git
 
