@@ -21,6 +21,7 @@ look x r@(PDef es r1) = case lookupIdent x es of
   Nothing     -> look x r1
 look _ Empty = error "panic: variable not found in env"
 
+
 eval :: Env -> Ter -> Val
 eval _ U               = VU
 eval e (App r s)       = app (eval e r) (eval e s)
@@ -259,7 +260,7 @@ showVal t0 = case t0 of
   VU            -> "Type"
   (VJoin u v)  -> pretty u <+> "\\/" <+> pretty v
   (VMeet u v)  -> pretty u <+> "/\\" <+> pretty v
-  (Ter t env)  -> hang 2 (pretty t) (pretty env)
+  (Ter t env)  -> showTer env t
   (VCon c us)  -> pretty c <+> showVals us
   (VPi a f)    ->
     do s <- getSupply      -- "Pi" <+> svs [a,f]
@@ -267,7 +268,7 @@ showVal t0 = case t0 of
   (VApp u v)   -> hang 2 (sv u) (sv1 v)
   (VSplit u v) -> sv u <+> sv1 v
   (VVar x)     -> pretty x
-  (VRecordT tele) -> "[" <> pretty tele <> "]"
+  (VRecordT tele) -> pretty tele
   (VRecord fs)   -> tupled [pretty l <+> "=" <+> showVal e | (l,e) <- fs]
   (VProj f u)     -> sv u <> "." <> pretty f
   (VLam f)  -> do
@@ -291,12 +292,22 @@ showVal1 u           = parens $ showVal u
 instance Show Val where
   show = render . showVal
 
+prettyLook :: Ident -> Env -> Val
+prettyLook x (Pair rho (n@(y,_l),u))
+  | x == y    = u
+  | otherwise = prettyLook x rho
+prettyLook x r@(PDef es r1) = case lookupIdent x es of
+  Just (y,_)  -> VVar (fst y)
+  Nothing -> VVar x
+prettyLook _ Empty = error "panic: variable not found in env"
+
+
 prettyTele :: VTele -> [D]
 prettyTele VEmpty = []
-prettyTele (VBind nm ty rest) = (pretty nm <+> ":" <+> showVal ty <> ";") : prettyTele (rest $ VVar nm)
+prettyTele (VBind nm ty rest) = (pretty nm <+> ":" <+> showVal ty) : prettyTele (rest $ VVar nm)
 
 instance Pretty VTele where
-  pretty = sep . prettyTele
+  pretty = encloseSep "[" "]" ";" . prettyTele
 
 instance Pretty Env where
   -- pretty e = brackets (sep (reverse (showEnv e)))
@@ -307,3 +318,59 @@ showEnv e0 = case e0 of
     Empty            -> []
     (PDef _xas env)   -> showEnv env
     (Pair env ((x,_),u)) -> (pretty x <> ":" <> pretty u <> ";") : showEnv env
+
+instance Show Loc where
+  show (Loc name (i,j)) = name ++ "_L" ++ show i ++ "_C" ++ show j
+
+instance Pretty Ter where
+  pretty = showTer Empty
+
+showTele :: Env -> Tele -> [D]
+showTele ρ [] = mempty
+showTele ρ (((x,_loc),t):tele) = (pretty x <> " : " <> showTer ρ t) : showTele ρ tele
+
+showTer :: Env -> Ter -> D
+showTer _ U             = "U"
+showTer ρ (Meet e0 e1)  = showTer ρ e0 <+> "/\\" <+> showTer ρ e1
+showTer ρ (Join e0 e1)  = showTer ρ e0 <+> "\\/" <+> showTer ρ e1
+showTer ρ (App e0 e1)   = showTer ρ e0 <+> showTer1 ρ e1
+showTer ρ (Pi e0 e1)    = "Pi" <+> showTers ρ [e0,e1]
+showTer ρ (Lam (x,_) e) = "\\" <> pretty x <+> "->" <+> showTer ρ e
+showTer ρ (Proj l e)       = showTer ρ e <> "." <> pretty l
+showTer ρ (RecordT ts)  = encloseSep "[" "]" ";" (showTele ρ ts)
+showTer ρ (Record fs)   = "(" <> hcat [pretty l <> " = " <> showTer ρ e | (l,e) <- fs] <> ")"
+showTer ρ (Where e d)   = showTer ρ e <+> "where" <+> showDecls ρ d
+showTer ρ (Var x)       = showVal (prettyLook x ρ)
+showTer ρ (Con c es)    = pretty c <+> showTers ρ es
+showTer ρ (Split l _)   = "split " <> pretty l
+showTer ρ (Sum (name,_) branches) = encloseSep "{" "}" "| " (map (showBranch ρ) branches)
+showTer ρ (Undef _)     = "undefined (1)"
+showTer ρ (Real r)      = showy r
+showTer ρ (Prim n)      = showy n
+
+showBranch :: Env -> (Binder, Tele) -> D
+showBranch env ((b,_),tele) = pretty b <+> sep (map parens (showTele env tele))
+instance Pretty Loc where
+  pretty (Loc x l) = pretty x <> "@" <> pretty l
+
+showTers :: Env -> [Ter] -> D
+showTers ρ = hcat . map (showTer1 ρ)
+
+showTer1 :: Env -> Ter -> D
+showTer1 _ρ U           = "U"
+showTer1 _ρ (Con c [])  = pretty c
+showTer1 _ρ (Var x)     = pretty x
+showTer1 ρ u@(Split{}) = showTer ρ u
+showTer1 ρ u@(Sum{})   = showTer ρ u
+showTer1 ρ u           = parens $ showTer ρ u
+
+showDecl :: forall a. Pretty a => Env -> (a, Ter, Ter) -> D
+showDecl ρ (b,typ,ter) = vcat [pretty b <+> ":" <+> showTer ρ typ,
+                               pretty b <+> "=" <+> showTer ρ ter]
+showDecls :: Env -> Decls -> D
+showDecls ρ defs = vcat (map (showDecl ρ) defs)
+
+
+instance Show Ter where
+  show = render . pretty
+

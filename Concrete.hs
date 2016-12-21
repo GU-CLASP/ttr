@@ -5,6 +5,7 @@ module Concrete where
 
 import Exp.Abs
 import qualified TT as C
+import Eval
 import Pretty
 
 import Control.Arrow (second)
