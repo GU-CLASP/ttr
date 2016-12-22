@@ -258,45 +258,44 @@ convFields _ x x' = different x x'
 
 
 --------------------
-instance Pretty Val where pretty = showVal
+instance Pretty Val where pretty = showVal 0
 
-showVal :: Val -> D
-showVal t0 = case t0 of
+showVal :: Int -> Val -> D
+showVal ctx t0 = case t0 of
   VU            -> "Type"
-  (VJoin u v)  -> pretty u <+> "\\/" <+> pretty v
-  (VMeet u v)  -> pretty u <+> "/\\" <+> pretty v
-  (Ter t env)  -> -- showy t <> pretty env
-                  showTer env t
-  (VCon c us)  -> pretty c <+> showVals us
-  (VPi a f)    ->
+  (VJoin u v)  -> pp 2 (\p -> p u <+> "\\/" <+> p v)
+  (VMeet u v)  -> pp 3 (\p -> p u <+> "/\\" <+> p v)
+  (Ter t env)  -> showTer ctx env t
+  (VCon c us)  -> prn 4 (pretty c <+> showArgs us)
+  (VPi a f)    -> pp 1 $ \p ->
     do s <- getSupply      -- "Pi" <+> svs [a,f]
-       parens (pretty s <> ":" <> pretty a) <+> "->" </> pretty (app f (VVar s))
-  (VApp u v)   -> hang 2 (sv u) (sv1 v)
-  (VSplit u v) -> sv u <+> sv1 v
+       let b = app f (VVar s)
+           depends = s `elem` unknowns b
+       ((if depends
+         then parens (pretty s <> ":" <> pretty a)
+         else showVal 2 a)
+         <+> "->") </> p b
+  (VApp u v)   -> pp 4 (\p -> hang 2 (p u) (showVal 5 v))
+  (VSplit u v) -> pretty u <+> showVal 5 v
   (VVar x)     -> pretty x
   (VRecordT tele) -> pretty tele
-  (VRecord fs)   -> tupled [pretty l <+> "=" <+> showVal e | (l,e) <- fs]
-  (VProj f u)     -> sv u <> "." <> pretty f
-  (VLam f)  -> do
+  (VRecord fs)   -> tupled [pretty l <+> "=" <+> pretty e | (l,e) <- fs]
+  (VProj f u)     -> pp 5 (\p -> p u <> "." <> pretty f)
+  (VLam f)  -> pp 1 $ \p -> do
     s <- getSupply
-    hang 0 ("\\" <> pretty s <+> "->") (showVal (f $ VVar s))
+    hang 0 ("\\" <> pretty s <+> "->") (p (f $ VVar s))
   (VPrim _ nm) -> pretty nm
   (VAbstract nm) -> pretty ('#':nm)
- where sv = showVal
-       sv1 = showVal1
-       svs = showVals
+ where pp :: Int -> ((Val -> D) -> D) -> D
+       pp opPrec k = prn opPrec (k (showVal opPrec))
+       prn opPrec = (if opPrec < ctx then parens else id)
 
-showVals :: [Val] -> D
-showVals = sep . map showVal1
+showArgs :: [Val] -> D
+showArgs = sep . map (showVal 5)
 
-showVal1 :: Val -> D
-showVal1 VU          = "Type"
-showVal1 (VCon c []) = pretty c
-showVal1 u@(VVar{})  = showVal u
-showVal1 u           = parens $ showVal u
 
 instance Show Val where
-  show = render . showVal
+  show = render . pretty
 
 prettyLook :: Ident -> Env -> D
 prettyLook x (Pair rho (n@(y,_l),u))
@@ -310,7 +309,7 @@ prettyLook x Empty = pretty x {- typically bound in a Split -}
 
 prettyTele :: VTele -> [D]
 prettyTele VEmpty = []
-prettyTele (VBind nm ty rest) = (pretty nm <+> ":" <+> showVal ty) : prettyTele (rest $ VVar nm)
+prettyTele (VBind nm ty rest) = (pretty nm <+> ":" <+> pretty ty) : prettyTele (rest $ VVar nm)
 
 instance Pretty VTele where
   pretty = encloseSep "[" "]" ";" . prettyTele
@@ -326,56 +325,84 @@ showEnv e0 = case e0 of
     (Pair env ((x,_),u)) -> (pretty x <> "=" <> pretty u) : showEnv env
 
 instance Pretty Ter where
-  pretty = showTer Empty
+  pretty = showTer 0 Empty
 
 showTele :: Env -> Tele -> [D]
 showTele ρ [] = mempty
-showTele ρ (((x,_loc),t):tele) = (pretty x <> " : " <> showTer ρ t) : showTele ρ tele
+showTele ρ (((x,_loc),t):tele) = (pretty x <> " : " <> showTer 0 ρ t) : showTele ρ tele
 
-showTer :: Env -> Ter -> D
-showTer _ U             = "U"
-showTer ρ (Meet e0 e1)  = showTer ρ e0 <+> "/\\" <+> showTer ρ e1
-showTer ρ (Join e0 e1)  = showTer ρ e0 <+> "\\/" <+> showTer ρ e1
-showTer ρ (App e0 e1)   = showTer ρ e0 <+> showTer1 ρ e1
-showTer ρ (Pi e0 e1)    = "Pi" <+> showTers ρ [e0,e1]
-showTer ρ (Lam (x,_) e) = hang 0 ("\\" <> pretty x <+> "->") (showTer ρ e)
-showTer ρ (Proj l e)       = showTer ρ e <> "." <> pretty l
-showTer ρ (RecordT ts)  = encloseSep "[" "]" ";" (showTele ρ ts)
-showTer ρ (Record fs)   = "(" <> hcat [pretty l <> " = " <> showTer ρ e | (l,e) <- fs] <> ")"
-showTer ρ (Where e d)   = showTer ρ e <+> "where" <+> showDecls ρ d
-showTer ρ (Var x)       =
-  -- pretty x <> pretty ρ
-  prettyLook x ρ
-showTer ρ (Con c es)    = pretty c <+> showTers ρ es
-showTer ρ (Split _l branches)   = hang 2 "split"  $ showSplitBranches ρ branches
-  
-showTer ρ (Sum (_name,_) branches) = encloseSep "{" "}" "| " (map (showBranch ρ) branches)
-showTer ρ (Undef _)     = "undefined (1)"
-showTer ρ (Real r)      = showy r
-showTer ρ (Prim n)      = showy n
+showTer :: Int -> Env -> Ter -> D
+showTer ctx ρ t0 = case t0 of
+   U             -> "U"
+   (Meet e0 e1)  -> pp 2 $ \p -> p e0 <+> "/\\" <+> p e1
+   (Join e0 e1)  -> pp 2 $ \p -> p e0 <+> "\\/" <+> p e1
+   (App e0 e1)   -> pp 4 $ \p -> p e0 <+> showTer 5 ρ e1
+   (Pi a (Lam ("_",_) t)) -> pp 1 $ \p -> (showTer 2 ρ a <+> "->") </> p t
+   (Pi a (Lam x t)) -> pp 1 $ \p -> (parens (pretty x <> ":" <> showTer 0 ρ a) <+> "->") </> p t
+   (Pi e0 e1)    -> "Pi" <+> showTersArgs ρ [e0,e1]
+   (Lam (x,_) e) -> pp 2 (\p -> hang 0 ("\\" <> pretty x <+> "->") (p e))
+   (Proj l e)    -> pp 5 (\p -> p e <> "." <> pretty l)
+   (RecordT ts)  -> encloseSep "[" "]" ";" (showTele ρ ts)
+   (Record fs)   -> encloseSep "(" ")" "," [pretty l <> " = " <> showTer 0 ρ e | (l,e) <- fs]
+   (Where e d)   -> pp 0 (\p -> p e <+> "where" <+> showDecls ρ d)
+   (Var x)       -> prettyLook x ρ
+   (Con c es)    -> pretty c <+> showTersArgs ρ es
+   (Split _l branches)   -> hang 2 "split"  $ showSplitBranches ρ branches
+   (Sum (_name,_) branches) -> encloseSep "{" "}" "| " (map (showBranch ρ) branches)
+   (Undef _)     -> "undefined (1)"
+   (Real r)      -> showy r
+   (Prim n)      -> showy n
+ where pp :: Int -> ((Ter -> D) -> D) -> D
+       pp opPrec k = prn opPrec (k (showTer opPrec ρ))
+       prn opPrec = (if opPrec < ctx then parens else id)
+
 
 showSplitBranches ρ branches = encloseSep "{" "}" ";"
-  [hang 2 (pretty l <+> sep (map (pretty . fst) bnds) <+> "↦") (showTer ρ t)  | (l,(bnds,t)) <- branches]
+  [hang 2 (pretty l <+> sep (map (pretty . fst) bnds) <+> "↦") (showTer 0 ρ t)  | (l,(bnds,t)) <- branches]
   
 showBranch :: Env -> (Binder, Tele) -> D
 showBranch env ((b,_),tele) = pretty b <+> sep (map parens (showTele env tele))
 instance Pretty Loc where
   pretty (Loc x l) = pretty x <> "@" <> pretty l
 
-showTers :: Env -> [Ter] -> D
-showTers ρ = hcat . map (showTer1 ρ)
-
-showTer1 :: Env -> Ter -> D
-showTer1 _ρ U           = "U"
-showTer1 _ρ (Con c [])  = pretty c
-showTer1 ρ (Var x)     = prettyLook x ρ
-showTer1 ρ u@(Split{}) = showTer ρ u
-showTer1 ρ u@(Sum{})   = showTer ρ u
-showTer1 ρ u           = parens $ showTer ρ u
+showTersArgs :: Env -> [Ter] -> D
+showTersArgs ρ = hcat . map (showTer 5 ρ)
 
 showDecl :: forall a. Pretty a => Env -> (a, Ter, Ter) -> D
-showDecl ρ (b,typ,ter) = vcat [pretty b <+> ":" <+> showTer ρ typ,
-                               pretty b <+> "=" <+> showTer ρ ter]
+showDecl ρ (b,typ,ter) = vcat [pretty b <+> ":" <+> showTer 0 ρ typ,
+                               pretty b <+> "=" <+> showTer 0 ρ ter]
 showDecls :: Env -> Decls -> D
 showDecls ρ defs = vcat (map (showDecl ρ) defs)
 
+class Value v where
+  unknowns :: v -> [String]
+
+instance Value Val where
+  unknowns v0 = case v0 of
+    VU -> []
+    VPi x y -> unknowns x ++ unknowns y
+    VRecordT x -> unknowns x
+    VRecord x -> concatMap (unknowns . snd) x
+    VCon _ x -> concatMap unknowns x
+    VApp x y -> unknowns x ++ unknowns y
+    VSplit x y -> unknowns x ++ unknowns y
+    VProj _ x -> unknowns x
+    VLam f -> unknowns (f (VVar "___UNK___"))
+    VPrim{} -> []
+    VAbstract{} -> []
+    VMeet x y -> unknowns x ++ unknowns y
+    VJoin x y -> unknowns x ++ unknowns y
+    VVar x -> [x]
+    Ter _ env -> unknowns env
+
+instance Value Env where
+  unknowns Empty = []
+  unknowns (Pair env (_,u)) = unknowns env ++ unknowns u
+  unknowns (PDef _ env) = unknowns env
+
+instance Value VTele where
+  unknowns VEmpty = []
+  unknowns (VBind _ x y) = unknowns x ++ unknowns (y (VVar "___UNK___"))
+  unknowns VBot = []
+
+  

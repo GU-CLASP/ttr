@@ -29,7 +29,7 @@ getSupply = do
 ($$) :: D -> D -> D
 ($$)  = liftM2 (PC.$$)
 
-x </> y  = Pretty.hsep [x,y]
+x </> y  = Pretty.sep [x,y]
 
 infixr 6 <+>
 
