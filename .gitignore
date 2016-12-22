@@ -17,5 +17,6 @@ cabal.sandbox.config
 *.hp
 *.eventlog
 .stack-work/
+.styx/
 cabal.project.local
 /Exp
