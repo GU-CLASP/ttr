@@ -24,22 +24,22 @@ separator   Decl ";" ;
 Where.    ExpWhere ::= Exp "where" "{" [Decl] "}" ;
 NoWhere.  ExpWhere ::= Exp ;
 
-PrimOp.   Exp  ::= "primitive" String;
 Let.      Exp  ::= "let" "{" [Decl] "}" "in" Exp ;
-Lam.      Exp  ::= "\\" AIdent [AIdent] "->" Exp ;
-Split.    Exp  ::= "split" "{" [Branch] "}" ;
+Lam.      Exp1  ::= "\\" AIdent [AIdent] "->" Exp1 ;
 Fun.      Exp1 ::= Exp2 "->" Exp1 ;
 Pi.       Exp1 ::= "(" PseudoTDecl ")" "->" Exp1 ;
-Or.       Exp1 ::= Exp1 "\\/" Exp1;
-And.      Exp1 ::= Exp1 "/\\" Exp1;
-App.      Exp2 ::= Exp2 Exp3 ;
-Proj.     Exp3 ::= Exp3 "." AIdent ;
-Tuple.    Exp3 ::= "(" [Fld] ")" ;
-Record.   Exp3 ::= "[" [PseudoTDecl] "]"  ;
-Var.      Exp3 ::= AIdent ;
-U.        Exp3 ::= "Type" ;
-Real.     Exp3 ::= Double ;
-coercions Exp 3 ;
+Or.       Exp2 ::= Exp2 "\\/" Exp2;
+And.      Exp3 ::= Exp3 "/\\" Exp3;
+App.      Exp4 ::= Exp4 Exp5 ;
+Proj.     Exp5 ::= Exp5 "." AIdent ;
+Tuple.    Exp6 ::= "(" [Fld] ")" ;
+Record.   Exp6 ::= "[" [PseudoTDecl] "]"  ;
+Var.      Exp6 ::= AIdent ;
+U.        Exp6 ::= "Type" ;
+Real.     Exp6 ::= Double ;
+Split.    Exp6  ::= "split" "{" [Branch] "}" ;
+PrimOp.   Exp6  ::= "primitive" String;
+coercions Exp 6 ;
 
 separator Exp "," ;
 
