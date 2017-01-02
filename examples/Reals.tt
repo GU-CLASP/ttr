@@ -21,7 +21,7 @@ dotProd : List Real -> List Real -> Real
 dotProd xs ys = foldr Real Real (zipWith Real Real Real times xs ys) plus 0.0
 
 Positive : Real -> Type
-Positive = primitive "#>0"
+Positive = primitive "#>=0"
 
 decidePositivity : (x : Real) -> Dec (Positive x)
 decidePositivity x = (primitive "positive?") x (Dec (Positive x)) yes no

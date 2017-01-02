@@ -1,3 +1,5 @@
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -5,20 +7,23 @@
 -- Common functions used for pretty printing.
 module Pretty where
 import Text.PrettyPrint.Compact as PC
-import Control.Monad.State
+import Control.Monad.Reader
 import Data.String
-import Data.Traversable
+import Data.Char (isDigit)
+import qualified Data.Map as M
+
 --------------------------------------------------------------------------------
 -- | Pretty printing combinators. Use the same names as in the pretty library.
 
-type Sho a = State [String] a
+type Sho a = Reader (M.Map String Int) a
 type D = Sho Doc
 
-getSupply :: Sho String
-getSupply = do
-  (x:xs) <- get
-  put xs
-  return x
+withVar :: String -> (String -> Sho a) -> Sho a
+withVar s k = do
+  nextIdx <- ask
+  let (reverse -> idx,reverse -> name) = span isDigit (reverse s)
+      i = max (if null idx then Nothing else Just (read idx)) (M.lookup name nextIdx)
+  local (M.insert name (maybe 0 (+1) i)) (k (name ++ maybe "" show i))
 
 (<+>) :: D -> D -> D
 (<+>)  = liftM2 (PC.<+>)
@@ -40,7 +45,7 @@ namesFrom :: [Char] -> [[Char]]
 namesFrom xs = [x ++ n | n <- "":map show [(1::Int)..], x <- map (:[]) xs]
 
 render :: D -> String
-render d = PC.render $ fst $ runState d (namesFrom ['α'..'ω'])
+render d = PC.render $ runReader d M.empty
 
 class Pretty a where
   pretty :: a -> D

@@ -52,7 +52,7 @@ declDefs decl = [ (x,d) | (x,_,d) <- decl]
 
 -- Terms
 data Ter = App Ter Ter
-         | Pi Ter Ter
+         | Pi String Ter Ter
          | Lam Binder Ter
          | RecordT Tele
          | Record [(String,Ter)]
@@ -93,7 +93,7 @@ data VTele = VEmpty | VBind Ident Val (Val -> VTele)
 
 data Val = VU
          | Ter Ter Env
-         | VPi Val Val
+         | VPi String Val Val
          | VRecordT VTele
          | VRecord [(String,Val)]
          | VCon Ident [Val]
@@ -101,7 +101,7 @@ data Val = VU
          | VSplit Val Val          -- the second Val must be neutral
          | VVar String
          | VProj String Val
-         | VLam (Val -> Val)
+         | VLam String (Val -> Val)
          | VPrim Dynamic String
          | VAbstract String
          | VMeet Val Val

@@ -26,9 +26,9 @@ eval :: Env -> Ter -> Val
 eval _ U               = VU
 eval e (App r s)       = app (eval e r) (eval e s)
 eval e (Var i)         = snd (look i e)
-eval e (Pi a b)        = VPi (eval e a) (eval e b)
+eval e (Pi nm a b)     = VPi nm (eval e a) (eval e b)
 -- eval e (Lam x t)    = Ter (Lam x t) e -- stop at lambdas
-eval e (Lam x t)       = VLam $ \x' -> eval (Pair e (x,x')) t
+eval e (Lam x t)       = VLam (fst x) $ \x' -> eval (Pair e (x,x')) t
 eval e (RecordT bs)      = VRecordT $ evalTele e bs
 eval e (Record fs)     = VRecord [(l,eval e x) | (l,x) <- fs]
 eval e (Proj l a)        = projVal l (eval e a)
@@ -48,7 +48,7 @@ abstract x = foldl app (VAbstract x)
 
 binOp :: (Typeable a, Typeable b, Typeable c, Show c) =>
          (a -> b -> c) -> String -> Val
-binOp op opName = VLam $ \vx -> VLam $ \vy -> case (vx,vy) of
+binOp op opName = VLam "x" $ \vx -> VLam "y" $ \vy -> case (vx,vy) of
   (VPrim (fromDynamic -> Just x) _, VPrim (fromDynamic -> Just y) _) ->
       let z = op x y
       in VPrim (toDyn z) (show z)
@@ -58,13 +58,13 @@ lkPrim :: String -> Val
 lkPrim "-" = binOp ((-) :: Double -> Double -> Double) "-"
 lkPrim "+" = binOp ((+) :: Double -> Double -> Double) "+"
 lkPrim "*" = binOp ((*) :: Double -> Double -> Double) "*"
-lkPrim "positive?" = VLam $ \xi ->
-                     VLam $ \ty ->
-                     VLam $ \true ->
-                     VLam $ \false -> case xi of
+lkPrim "positive?" = VLam "x" $ \xi ->
+                     VLam "type" $ \ty ->
+                     VLam "true" $ \true ->
+                     VLam "false" $ \false -> case xi of
   VPrim (fromDynamic -> Just (x::Double)) _ -> if x >= 0
                                                then true `app` (abstract "positive!" [xi])
-                                               else false `app` VLam (\q -> -- the type system prevents getting here.
+                                               else false `app` VLam "neg" (\q -> -- the type system prevents getting here.
                                                              abstract "impossible" [q,(abstract "negative!" [xi])])
   _ -> abstract "positive?" [xi,ty,true,false]
 lkPrim p = abstract p []
@@ -73,22 +73,22 @@ real :: Val
 real = VAbstract "R"
 
 positive :: Val -> Val
-positive v = abstract ">0" [v]
+positive v = abstract ">=0" [v]
 
 bot :: Val
 bot = Ter (Sum ("Bot",Loc "Props" (4,6)) []) Empty
 
 infixr -->
 (-->) :: Val -> Val -> Val
-a --> b = pi a $ \_ -> b
-pi :: Val -> (Val -> Val) -> Val
-pi a f = VPi a $ VLam f
+a --> b = pi "_" a $ \_ -> b
+pi :: String -> Val -> (Val -> Val) -> Val
+pi nm a f = VPi nm a $ VLam nm f
 lkPrimTy :: String -> Val
 lkPrimTy "-" = real --> real --> real
 lkPrimTy "+" = real --> real --> real
 lkPrimTy "*" = real --> real --> real
-lkPrimTy "positive?" = pi real $ \x ->
-                       pi VU   $ \ty ->
+lkPrimTy "positive?" = pi "x" real $ \x ->
+                       pi "type" VU   $ \ty ->
                        (positive x --> ty) --> ((positive x --> bot) --> ty) --> ty
 lkPrimTy "#R" = VU
 lkPrimTy "#>=0" = real --> VU
@@ -136,7 +136,7 @@ meetFields VBot _ = VBot
 meetFields _ VBot = VBot
 
 app :: Val -> Val -> Val
-app (VLam f) u = f u
+app (VLam _ f) u = f u
 -- app (Ter (Lam cs x t) e) u = eval (Pair e (x,u)) t
 app (Ter (Split _ nvs) e) (VCon name us) = case lookup name nvs of
     Just (xs,t) -> eval (upds e (zip xs us)) t
@@ -175,13 +175,13 @@ noSub a b = Just $ sep [pretty a,"not a subtype of",pretty b]
 -- | @conv k a b@ Checks that @a@ can be converted to @b@.
 conv :: Int -> Val -> Val -> Maybe D
 conv _ VU VU = Nothing
-conv k (VLam f) (VLam g) = do
+conv k (VLam _ f) (VLam _ g) = do
   let v = mkVar k
   conv (k+1) (f v) (g v)
-conv k (VLam f) g = do
+conv k (VLam _ f) g = do
   let v = mkVar k
   conv (k+1) (f v) (app g v)
-conv k f (VLam g) = do
+conv k f (VLam _ g) = do
   let v = mkVar k
   conv (k+1) (app f v) (g v)
 conv k (Ter (Lam x u) e) (Ter (Lam x' u') e') = do
@@ -199,7 +199,7 @@ conv k (Ter (Sum p _) e)   (Ter (Sum p' _) e') =
   (p `equal` p') <> convEnv k e e'
 conv k (Ter (Undef p) e) (Ter (Undef p') e') =
   (p `equal` p') <> convEnv k e e'
-conv k (VPi u v) (VPi u' v') = do
+conv k (VPi _ u v) (VPi _ u' v') = do
   let w = mkVar k
   conv k u' u  <> conv (k+1) (app v w) (app v' w)
 conv k (VRecordT fs) (VRecordT fs') = 
@@ -218,7 +218,7 @@ conv _ x              x'           = different x x'
 -- @sub _ a b@: check that a is a subtype of b.
 sub :: Int -> Val -> Val -> Maybe D
 sub _ VU VU = Nothing
-sub k (VPi u v) (VPi u' v') = do
+sub k (VPi _ u v) (VPi _ u' v') = do
   let w = mkVar k
   conv k u' u  <> sub (k+1) (app v w) (app v' w)
 sub k (VRecordT fs) (VRecordT fs') = subTele k fs fs'
@@ -271,23 +271,18 @@ showVal ctx t0 = case t0 of
   (VMeet u v)  -> pp 3 (\p -> p u <+> "/\\" <+> p v)
   (Ter t env)  -> showTer ctx env t
   (VCon c us)  -> prn 4 (pretty c <+> showArgs us)
-  (VPi a f)    -> pp 1 $ \p ->
-    do s <- getSupply      -- "Pi" <+> svs [a,f]
-       let b = app f (VVar s)
-           depends = s `elem` unknowns b
-       ((if depends
-         then parens (pretty s <> ":" <> pretty a)
-         else showVal 2 a)
-         <+> "->") </> p b
+  (VPi nm a f) -> pp 1 $ \p ->
+     if depends then withVar nm $ \v -> (parens (pretty v <> ":" <> pretty a) <+> "->") </> p (f `app` (VVar v))
+                else (showVal 2 a  <+> "->") </> p (f `app` (VVar "_"))
+    where depends =  "__PI__" `elem` unknowns (f `app` (VVar "__PI__"))
   (VApp u v)   -> pp 4 (\p -> hang 2 (p u) (showVal 5 v))
   (VSplit u v) -> pretty u <+> showVal 5 v
   (VVar x)     -> pretty x
   (VRecordT tele) -> pretty tele
   (VRecord fs)   -> tupled [pretty l <+> "=" <+> pretty e | (l,e) <- fs]
   (VProj f u)     -> pp 5 (\p -> p u <> "." <> pretty f)
-  (VLam f)  -> pp 1 $ \p -> do
-    s <- getSupply
-    hang 0 ("\\" <> pretty s <+> "->") (p (f $ VVar s))
+  (VLam nm f)  -> pp 1 $ \p -> withVar nm $ \v ->
+    hang 0 ("\\" <> pretty v <+> "->") (p (f $ VVar v))
   (VPrim _ nm) -> pretty nm
   (VAbstract nm) -> pretty ('#':nm)
  where pp :: Int -> ((Val -> D) -> D) -> D
@@ -340,9 +335,9 @@ showTer ctx ρ t0 = case t0 of
    (Meet e0 e1)  -> pp 2 $ \p -> p e0 <+> "/\\" <+> p e1
    (Join e0 e1)  -> pp 2 $ \p -> p e0 <+> "\\/" <+> p e1
    (App e0 e1)   -> pp 4 $ \p -> p e0 <+> showTer 5 ρ e1
-   (Pi a (Lam ("_",_) t)) -> pp 1 $ \p -> (showTer 2 ρ a <+> "->") </> p t
-   (Pi a (Lam x t)) -> pp 1 $ \p -> (parens (pretty x <> ":" <> showTer 0 ρ a) <+> "->") </> p t
-   (Pi e0 e1)    -> "Pi" <+> showTersArgs ρ [e0,e1]
+   (Pi _ a (Lam ("_",_) t)) -> pp 1 $ \p -> (showTer 2 ρ a <+> "->") </> p t
+   (Pi _ a (Lam x t)) -> pp 1 $ \p -> (parens (pretty x <> ":" <> showTer 0 ρ a) <+> "->") </> p t
+   (Pi _ e0 e1)    -> "Pi" <+> showTersArgs ρ [e0,e1]
    (Lam (x,_) e) -> pp 2 (\p -> hang 0 ("\\" <> pretty x <+> "->") (p e))
    (Proj l e)    -> pp 5 (\p -> p e <> "." <> pretty l)
    (RecordT ts)  -> encloseSep "[" "]" ";" (showTele ρ ts)
@@ -383,14 +378,14 @@ class Value v where
 instance Value Val where
   unknowns v0 = case v0 of
     VU -> []
-    VPi x y -> unknowns x ++ unknowns y
+    VPi _ x y -> unknowns x ++ unknowns y
     VRecordT x -> unknowns x
     VRecord x -> concatMap (unknowns . snd) x
     VCon _ x -> concatMap unknowns x
     VApp x y -> unknowns x ++ unknowns y
     VSplit x y -> unknowns x ++ unknowns y
     VProj _ x -> unknowns x
-    VLam f -> unknowns (f (VVar "___UNK___"))
+    VLam _ f -> unknowns (f (VVar "___UNK___"))
     VPrim{} -> []
     VAbstract{} -> []
     VMeet x y -> unknowns x ++ unknowns y

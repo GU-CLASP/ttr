@@ -38,7 +38,7 @@ logg x = local (\e -> e {errCtx = x:errCtx e})
 oops :: D -> Typing a
 oops msg = do
   TEnv {..} <- ask
-  throwError $ hcat ["In: " <+> hcat (map ((<> ":")) (reverse errCtx)),
+  throwError $ sep ["In: " <+> sep (map ((<> ":")) (reverse errCtx)),
                      msg,
                      "in environment" <> pretty env,
                      "in context" <+> pretty ctxt]
@@ -140,14 +140,14 @@ check a t = case (a,t) of
     (bs,nu) <- getLblType c a
     checks (bs,nu) es
   (VU,Sum _ bs) -> sequence_ [checkTele as | (_,as) <- bs]
-  (VPi (Ter (Sum _ cas) nu) f,Split _ ces) -> do
+  (VPi _ (Ter (Sum _ cas) nu) f,Split _ ces) -> do
     let cas' = sortBy (compare `on` fst . fst) cas
         ces' = sortBy (compare `on` fst) ces
     if map (fst . fst) cas' == map fst ces'
        then sequence_ [ checkBranch (as,nu) f brc
                       | (brc, (_,as)) <- zip ces' cas' ]
        else oops "case branches does not match the data type"
-  (VPi a f,Lam x t)  -> do
+  (VPi _ a f,Lam x t)  -> do
     var <- getFresh
     local (addTypeVal (x,a)) $ check (app f var) t
   (VRecordT ts, Record fs) -> do
@@ -157,7 +157,7 @@ check a t = case (a,t) of
     localM (addDecls d) $ check a e
   (_,Undef _) -> return ()
   _ -> do
-    logg (sep ["Checking that " <> pretty t, "has type " <> pretty a]) $ do
+    logg (sep ["Checking that" <+> pretty t, "has type" <+> pretty a]) $ do
        v <- checkInfer t
        checkSub "inferred type" a v
 
@@ -187,7 +187,7 @@ checkSub msg a v = do
     case sub k v a of
       Nothing -> return ()
       Just err -> do
-        oops $ hcat ["In" <+> msg, pretty v <> " is not a subtype of " <> pretty a, "because " <> err]
+        oops $ sep ["In" <+> msg, pretty v <> " is not a subtype of " <> pretty a, "because " <> err]
 
 checkBranch :: (Tele,Env) -> Val -> Brc -> Typing ()
 checkBranch (xas,nu) f (c,(xs,e)) = do
@@ -208,7 +208,7 @@ checkInfer :: Ter -> Typing Val
 checkInfer e = case e of
   Real _ -> return real
   Prim p -> return $ lkPrimTy p
-  Pi a (Lam x b) -> do
+  Pi _ a (Lam x b) -> do
     _ <- inferType a
     localM (addType (x,a)) $ inferType b
   RecordT [] -> return VU
@@ -224,7 +224,7 @@ checkInfer e = case e of
   App t u -> do
     c <- checkInfer t
     case c of
-      VPi a f -> do
+      VPi _ a f -> do
         checkLogg a u
         rho <- asks env
         let v = eval rho u
@@ -254,12 +254,7 @@ checkInferProj l _ VEmpty = oops $ "field not found:" <> pretty l
 checkInferProj l r (VBind x a rest)
   | x == l = return a
   | otherwise = checkInferProj l r (rest (projVal x r))
-
-extractFun :: Int -> Val -> Typing ([Val],Val)
-extractFun 0 a = return ([],a)
-extractFun n (VPi a f) = do
-  (as,b) <- extractFun (n-1) (f `app` VVar "extractFun")
-  return (a:as,b)
+checkInferProj _ _ VBot = error "checkInferProj: VBot escaped from meet"
 
 checks :: (Tele,Env) -> [Ter] -> Typing ()
 checks _              []     = return ()

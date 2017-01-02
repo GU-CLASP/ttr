@@ -5,16 +5,15 @@ module Concrete where
 
 import Exp.Abs
 import qualified TT as C
-import Eval
 import Pretty
 
 import Control.Arrow (second)
 import Control.Monad.Trans.Reader
-import Control.Monad.Trans.Except hiding (throwError)
+import Control.Monad.Trans.Except
 import Control.Monad.Except (throwError)
 import Control.Monad (when)
 import Data.Functor.Identity
-import Data.List (nub,find,(\\))
+import Data.List (nub)
 
 type Tele = [(AIdent,Exp)]
 type Ter  = C.Ter
@@ -45,7 +44,7 @@ unApps (App u v) ws = unApps u (v : ws)
 unApps u         ws = (u, ws)
 
 vTele :: [VTDecl] -> Tele
-vTele decls = [ (i, typ) | VTDecl id ids typ <- decls, i <- id:ids ]
+vTele decls = [ (i, typ) | VTDecl ident ids typ <- decls, i <- ident:ids ]
 
 -- turns an expression of the form App (... (App id1 id2) ... idn)
 -- into a list of idents
@@ -54,13 +53,11 @@ pseudoIdents = mapM unVar . uncurry (:) . flip unApps []
 
 pseudoTele :: [PseudoTDecl] -> Maybe Tele
 pseudoTele []                         = return []
-pseudoTele (PseudoTDecl exp typ : pd) = do
-    ids <- pseudoIdents exp
+pseudoTele (PseudoTDecl expr typ : pd) = do
+    ids <- pseudoIdents expr
     pt  <- pseudoTele pd
     return $ map (,typ) ids ++ pt
 
-
-err = throwError
 -------------------------------------------------------------------------------
 -- | Resolver and environment
 
@@ -145,10 +142,10 @@ lam a e = do x <- resolveBinder a; C.Lam x <$> local (insertVar x) e
 lams :: [AIdent] -> Resolver Ter -> Resolver Ter
 lams = flip $ foldr lam
 
-bind :: (Ter -> Ter -> Ter) -> (AIdent, Exp) -> Resolver Ter -> Resolver Ter
-bind f (x,t) e = f <$> resolveExp t <*> lam x e
+bind :: (String -> Ter -> Ter -> Ter) -> (AIdent, Exp) -> Resolver Ter -> Resolver Ter
+bind f (x@(AIdent(_,nm)),t) e = f nm <$> resolveExp t <*> lam x e
 
-binds :: (Ter -> Ter -> Ter) -> Tele -> Resolver Ter -> Resolver Ter
+binds :: (String -> Ter -> Ter -> Ter) -> Tele -> Resolver Ter -> Resolver Ter
 binds f = flip $ foldr $ bind f
 
 resolveExp :: Exp -> Resolver Ter
@@ -166,10 +163,10 @@ resolveExp (App t s)    = case unApps t [s] of
 
 resolveExp (Record t)  = case pseudoTele t of
   Just tele -> C.RecordT <$> resolveTele tele
-  Nothing   -> err "Telescope malformed in Sigma"
+  Nothing   -> throwError "Telescope malformed in Sigma"
 resolveExp (Pi t b)     =  case pseudoTele [t] of
   Just tele -> binds C.Pi tele (resolveExp b)
-  Nothing   -> err "Telescope malformed in Pigma"
+  Nothing   -> throwError "Telescope malformed in Pigma"
 resolveExp (Fun a b)    = bind C.Pi (AIdent ((0,0),"_"), a) (resolveExp b)
 resolveExp (Lam x xs t) = do
   lams (x:xs) (resolveExp t)
@@ -211,16 +208,16 @@ resolveLabel (Label n vdecl) =
 
 declsLabels :: [Decl] -> Resolver [(C.Binder,Arity)]
 declsLabels decls = do
-  let sums = concat [sum | DeclData _ _ sum <- decls]
+  let sums = concat [sumTyp | DeclData _ _ sumTyp <- decls]
   sequence [ (,length args) <$> resolveBinder lbl | Label lbl args <- sums ]
 
 -- Resolve Data or Def declaration
 resolveDDecl :: Decl -> Resolver (C.Ident, C.Ter)
 resolveDDecl (DeclDef  (AIdent (_,n)) args body) =
   (n,) <$> lams args (resolveWhere body)
-resolveDDecl (DeclData x@(AIdent (_,n)) args sum) =
-  (n,) <$> (lams args (C.Sum <$> resolveBinder x <*> mapM resolveLabel sum))
-resolveDDecl d = err $ "Definition expected" <+> showy d
+resolveDDecl (DeclData x@(AIdent (_,n)) args sumTyp) =
+  (n,) <$> (lams args (C.Sum <$> resolveBinder x <*> mapM resolveLabel sumTyp))
+resolveDDecl d = throwError $ "Definition expected" <+> showy d
 
 -- Resolve mutual declarations (possibly one)
 resolveMutuals :: [Decl] -> Resolver (C.Decls,[(C.Binder,SymKind)])
@@ -229,11 +226,11 @@ resolveMutuals decls = do
     cs      <- declsLabels decls
     let cns = map (fst . fst) cs ++ names
     when (nub cns /= cns) $
-      err $ "Duplicated constructor or ident:" <+> showy cns
+      throwError $ "Duplicated constructor or ident:" <+> showy cns
     rddecls <-
       mapM (local (insertVars binders . insertCons cs) . resolveDDecl) ddecls
     when (names /= map fst rddecls) $
-      err $ "Mismatching names in" <+> showy decls
+      throwError $ "Mismatching names in" <+> showy decls
     rtdecls <- resolveTele tdecls
     return ([ (x,t,d) | (x,t) <- rtdecls | (_,d) <- rddecls ],
             map (second Constructor) cs ++ map (,Variable) binders)
@@ -255,7 +252,7 @@ resolveDecls (DeclMutual defs : ds) = do
   (rdefs,names)  <- resolveMutuals defs
   (rds,  names') <- local (insertBinders names) $ resolveDecls ds
   return (rdefs : rds, names' ++ names)
-resolveDecls (decl:_) = err $ "Invalid declaration:" <+> showy decl
+resolveDecls (decl:_) = throwError $ "Invalid declaration:" <+> showy decl
 
 resolveModule :: Module -> Resolver ([C.Decls],[(C.Binder,SymKind)])
 resolveModule (Module n _imports decls) =
@@ -263,7 +260,7 @@ resolveModule (Module n _imports decls) =
 
 resolveModules :: [Module] -> Resolver ([C.Decls],[(C.Binder,SymKind)])
 resolveModules []         = return ([],[])
-resolveModules (mod:mods) = do
-  (rmod, names)  <- resolveModule mod
+resolveModules (modu:mods) = do
+  (rmod, names)  <- resolveModule modu
   (rmods,names') <- local (insertBinders names) $ resolveModules mods
   return (rmod ++ rmods, names' ++ names)
