@@ -11,6 +11,7 @@ import Data.Monoid hiding (Sum)
 import Data.Dynamic
 import Prelude hiding (pi)
 
+-- | Lookup a value in the environment
 look :: Ident -> Env -> (Binder, Val)
 look x (Pair rho (n@(y,_l),u))
   | x == y    = (n, u)
@@ -45,19 +46,18 @@ eval e (Join t u)      = vJoin (eval e t) (eval e u)
 abstract :: String -> [Val] -> Val
 abstract x = foldl app (VAbstract x)
 
-binOp :: forall a a1.
-               (Typeable a1, Typeable a, Show a1) =>
-               (Double -> a -> a1) -> String -> Val
+binOp :: (Typeable a, Typeable b, Typeable c, Show c) =>
+         (a -> b -> c) -> String -> Val
 binOp op opName = VLam $ \vx -> VLam $ \vy -> case (vx,vy) of
-  (VPrim (fromDynamic -> Just (x::Double)) _, VPrim (fromDynamic -> Just y) _) ->
+  (VPrim (fromDynamic -> Just x) _, VPrim (fromDynamic -> Just y) _) ->
       let z = op x y
       in VPrim (toDyn z) (show z)
   _ -> abstract opName [vx,vy]
 
 lkPrim :: String -> Val
-lkPrim "-" = binOp (-) "-"
-lkPrim "+" = binOp (+) "+"
-lkPrim "*" = binOp (+) "*"
+lkPrim "-" = binOp ((-) :: Double -> Double -> Double) "-"
+lkPrim "+" = binOp ((+) :: Double -> Double -> Double) "+"
+lkPrim "*" = binOp ((*) :: Double -> Double -> Double) "*"
 lkPrim "positive?" = VLam $ \xi ->
                         VLam $ \ty ->
                         VLam $ \true ->
@@ -315,7 +315,6 @@ instance Pretty VTele where
   pretty = encloseSep "[" "]" ";" . prettyTele
 
 instance Pretty Env where
-  -- pretty e = brackets (sep (reverse (showEnv e)))
   pretty e = encloseSep "[" "]" ";" $ reverse (showEnv e)
 
 showEnv :: Env -> [D]
@@ -375,7 +374,7 @@ showDecls :: Env -> Decls -> D
 showDecls ρ defs = vcat (map (showDecl ρ) defs)
 
 class Value v where
-  unknowns :: v -> [String]
+  unknowns :: v -> [String] -- aka "free variables"
 
 instance Value Val where
   unknowns v0 = case v0 of
