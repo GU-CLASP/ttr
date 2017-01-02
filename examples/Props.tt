@@ -4,7 +4,7 @@ Bot : Type  -- do not move this type (at all!) otherwise it won't be found by pr
 data Bot =
 
 Top : Type
-data Top = top
+Top = [ ]
 
 Dec : Type -> Type
 data Dec T = yes (p : T)

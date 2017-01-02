@@ -60,7 +60,7 @@ terminator VTDecl "" ;
 -- in the grammar when parsing Pi
 PseudoTDecl. PseudoTDecl ::=  Exp ":" Exp ;
 
-separator nonempty PseudoTDecl ";" ;
+separator PseudoTDecl ";" ;
 
 position token AIdent ((letter|'\''|'_'|'`')(letter|digit|'\''|'_')*) ;
 terminator AIdent "" ;
