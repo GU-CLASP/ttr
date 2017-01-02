@@ -59,9 +59,9 @@ lkPrim "-" = binOp ((-) :: Double -> Double -> Double) "-"
 lkPrim "+" = binOp ((+) :: Double -> Double -> Double) "+"
 lkPrim "*" = binOp ((*) :: Double -> Double -> Double) "*"
 lkPrim "positive?" = VLam $ \xi ->
-                        VLam $ \ty ->
-                        VLam $ \true ->
-                        VLam $ \false -> case xi of
+                     VLam $ \ty ->
+                     VLam $ \true ->
+                     VLam $ \false -> case xi of
   VPrim (fromDynamic -> Just (x::Double)) _ -> if x >= 0
                                                then true `app` (abstract "positive!" [xi])
                                                else false `app` VLam (\q -> -- the type system prevents getting here.
@@ -91,7 +91,7 @@ lkPrimTy "positive?" = pi real $ \x ->
                        pi VU   $ \ty ->
                        (positive x --> ty) --> ((positive x --> bot) --> ty) --> ty
 lkPrimTy "#R" = VU
-lkPrimTy "#>0" = real --> VU
+lkPrimTy "#>=0" = real --> VU
 lkPrimTy "#Ind" = VU
 lkPrimTy p = error ("No type for primitive: " ++ show p)
 
@@ -112,15 +112,18 @@ vMeet x y = VMeet x y
 hasField :: String -> VTele -> Bool
 hasField _ VEmpty = False
 hasField l (VBind l' _ t) = l == l' || hasField l (t (error "hasField: cannot look at values!"))
+hasField _ VBot = error "VBot escaped from meet"
 
 lacksField :: String -> VTele -> Bool
 lacksField l fs = not (hasField l fs)
 
+-- | Is this a bottom telescope?
 botTele :: VTele -> Bool
 botTele VEmpty = False
 botTele VBot = True
 botTele  (VBind _ _ t) = botTele (t (error "botTele: cannot look at values!"))
 
+-- | the meet of two telescopes
 meetFields :: VTele -> VTele -> VTele
 meetFields VEmpty fs = fs
 meetFields fs VEmpty = fs
@@ -129,7 +132,8 @@ meetFields fs@(VBind l a t) fs'@(VBind l' a' t')
   | lacksField l' fs  = VBind l' a' (\x -> meetFields fs (t' x))
   | lacksField l  fs' = VBind l  a  (\x -> meetFields fs' (t x))
   | otherwise = VBot
-
+meetFields VBot _ = VBot
+meetFields _ VBot = VBot
 
 app :: Val -> Val -> Val
 app (VLam f) u = f u
