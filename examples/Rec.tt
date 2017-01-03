@@ -15,10 +15,17 @@ second A B r = r.snd
 second' : (A : Type) -> (B : A -> Type) -> (r : Sigma A B) -> B (first A B r)
 second' A B r = r.snd
 
+Params : Type
+Params = [Ind : Type;
+          Animal Human Dog : Ind -> Type;
+          Hug : Ind -> Ind -> Type]
 
+Anim : Params -> Type
+Anim params = [x : params.Ind; isAnimal : params.Animal x]
 
+Huma : Params -> Type
+Huma params = Anim params /\ [x : params.Ind; isHuman : params.Human x]
 
-
-
-
-
+all : Params -> [Anim : Type; Huma : Type]
+all params = (Anim = Anim params,
+              Huma = Huma params)
