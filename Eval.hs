@@ -102,6 +102,9 @@ evalTele e (((x,l),t):ts) = VBind x t' (\x' -> evalTele (Pair e ((x,l),x')) ts)
 
 vJoin :: Val -> Val -> Val
 vJoin (VPi nm a b) (VPi _ a' b') = VPi nm (vMeet a a') (vJoin b b')
+vJoin (VRecordT fs) (VRecordT fs') | botTele x = VJoin (VRecordT fs) (VRecordT fs')
+                                   | otherwise = VRecordT x
+  where x = joinFields fs fs'
 vJoin x y = VJoin x y
 
 vMeet :: Val -> Val -> Val
@@ -138,6 +141,22 @@ meetFields fs@(VBind l a t) fs'@(VBind l' a' t')
   | otherwise = VBot
 meetFields VBot _ = VBot
 meetFields _ VBot = VBot
+
+
+-- | the join of two telescopes
+joinFields :: VTele -> VTele -> VTele
+joinFields VEmpty _ = VEmpty
+joinFields _ VEmpty = VEmpty
+joinFields fs@(VBind l a t) fs'@(VBind l' a' t')
+  | "__REMOVE__" `occursIn` a = joinFields (t remove) fs'
+  | "__REMOVE__" `occursIn` a' = joinFields fs (t' remove)
+  | l == l' = VBind l (vJoin a a') (\x -> joinFields (t x) (t' x))
+  | lacksField l' fs  = joinFields fs (t' remove)
+  | lacksField l  fs' = joinFields fs' (t remove)
+  | otherwise = VBot
+ where remove = VVar "__REMOVE__"
+joinFields VBot _ = VBot
+joinFields _ VBot = VBot
 
 app :: Val -> Val -> Val
 app (VLam _ f) u = f u
@@ -276,9 +295,8 @@ showVal ctx t0 = case t0 of
   (Ter t env)  -> showTer ctx env t
   (VCon c us)  -> prn 4 (pretty c <+> showArgs us)
   (VPi nm a f) -> pp 1 $ \p ->
-     if depends then withVar nm $ \v -> (parens (pretty v <> ":" <> pretty a) <+> "->") </> p (f `app` (VVar v))
-                else (showVal 2 a  <+> "->") </> p (f `app` (VVar "_"))
-    where depends =  "__PI__" `elem` unknowns (f `app` (VVar "__PI__"))
+     if dependent f then withVar nm $ \v -> (parens (pretty v <> ":" <> pretty a) <+> "->") </> p (f `app` (VVar v))
+     else (showVal 2 a  <+> "->") </> p (f `app` (VVar "_"))
   (VApp u v)   -> pp 4 (\p -> hang 2 (p u) (showVal 5 v))
   (VSplit u v) -> pretty u <+> showVal 5 v
   (VVar x)     -> pretty x
@@ -292,6 +310,9 @@ showVal ctx t0 = case t0 of
  where pp :: Int -> ((Val -> D) -> D) -> D
        pp opPrec k = prn opPrec (k (showVal opPrec))
        prn opPrec = (if opPrec < ctx then parens else id)
+
+x `occursIn` a = x `elem` unknowns a
+dependent f =  "__DEPENDS?__" `occursIn` (f `app` VVar "__DEPENDS?__")
 
 showArgs :: [Val] -> D
 showArgs = sep . map (showVal 5)
