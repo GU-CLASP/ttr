@@ -152,6 +152,10 @@ check a t = case (a,t) of
     local (addTypeVal (x,a)) $ check (app f var) t
   (VRecordT ts, Record fs) -> do
     checkRecord ts fs
+  (VMeet w v,_) -> check w t >> check v t
+  (VJoin w v,_) -> check w t `catchError` \e1 ->
+                   check v t `catchError` \e2 ->
+                   throwError $ sep [e1,"AND",e2]
   (_,Where e d) -> do
     checkDecls d
     localM (addDecls d) $ check a e
