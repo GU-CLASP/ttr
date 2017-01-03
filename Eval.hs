@@ -101,13 +101,17 @@ evalTele e (((x,l),t):ts) = VBind x t' (\x' -> evalTele (Pair e ((x,l),x')) ts)
   where t' = eval e t
 
 vJoin :: Val -> Val -> Val
-vJoin = VJoin
+vJoin (VPi nm a b) (VPi _ a' b') = VPi nm (vMeet a a') (vJoin b b')
+vJoin x y = VJoin x y
 
 vMeet :: Val -> Val -> Val
 vMeet (VRecordT fs) (VRecordT fs') | botTele x = VMeet (VRecordT fs) (VRecordT fs')
                                    | otherwise = VRecordT x
   where x = meetFields fs fs'
-vMeet x y = VMeet x y
+vMeet (VPi nm a b) (VPi _ a' b') = VPi nm (vJoin a a') (vMeet b b')
+vMeet x y = case conv 0 x y of
+              Nothing -> x
+              Just _ -> VMeet x y
 
 hasField :: String -> VTele -> Bool
 hasField _ VEmpty = False
