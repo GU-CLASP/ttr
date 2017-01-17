@@ -593,7 +593,6 @@ Typing:
 
 Simplification equations for meet and join (to use during evaluation):
 \begin{align*}
-  (Π V W) ∧ (Π V' W') &= Π (V ∨ V') (ΛX. \app W X ∧ \app {W'} X) \\
   [] ∧ V       &= V \\
   ⊥ ∧ V       &= ⊥ \\
   [l:V;W] ∧ [l:V';W']  &= [l:(V ∧ V');(\app W X ∧ \app {W'} X)] \\
@@ -603,6 +602,8 @@ Simplification equations for meet and join (to use during evaluation):
   V ∧ W & = ⊥ & \text {otherwise and if neither $A$ or $B$ is neutral.} \\
 \end{align*}
 (symmetrically for join)
+% (Π V W) ∧ (Π V' W') &= Π (V ∨ V') (ΛX. \app W X ∧ \app {W'} X) \\ % nonsense
+
 % \begin{align*}
 %   ((x:A) → B) ∨ ((x:A') → B') &= (x:A ∧ A') → (B ∨ B') \\
 %   [\vec f] ∨ [\vec f']                  &= [\vec f ∨ \vec f'] \\

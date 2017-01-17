@@ -170,7 +170,7 @@ checkRecord :: VTele -> [(String,Ter)] -> Typing ()
 checkRecord VEmpty _ = return () -- other fields are ignored.
 checkRecord (VBind x a r) ts =
   case lookup x ts of
-    Nothing -> oops $ sep ["type expects field", pretty x, "but it can't be found in the term."]
+    Nothing -> oops $ sep ["type expects field", pretty x, "but it cannot be found in the term."]
     Just t -> do
       t' <- checkEval a t
       checkRecord (r t') ts
