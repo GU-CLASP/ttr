@@ -1,4 +1,4 @@
-module Reals where
+module where
 import Lists
 import Props
 

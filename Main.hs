@@ -1,11 +1,15 @@
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
 module Main where
 
+import Data.String
 import Control.Monad.Trans.Reader
+import Control.Monad.Trans.State
 import Control.Monad.Except
 import Data.List
 import System.Directory
 import System.FilePath hiding ((</>))
+import qualified System.FilePath as FP
 import System.Environment
 import System.Console.GetOpt
 import System.Console.Haskeline
@@ -21,7 +25,6 @@ import qualified TypeChecker as TC
 import qualified TT as C
 import qualified Eval as E
 import Pretty
-
 type Interpreter a = InputT IO a
 
 -- Flag handling
@@ -79,14 +82,12 @@ main = do
 initLoop :: [Flag] -> FilePath -> IO ()
 initLoop flags f = do
   -- Parse and type-check files
-  (_,_,mods) <- imports True ([],[],[]) f
-  -- Translate to CTT
-  let res = runResolver $ resolveModules mods
+  (res,_) <- runStateT (load (dropFileName f) (dropExtension (takeFileName f))) []
   case res of
-    Left err    -> do
-      putStrLn $ render $ sep ["Resolver failed: ",err]
+    Failed err -> do
+      putStrLn $ render $ sep ["Loading failed: ",err]
       runInputT (settings []) (loop flags f [] TC.verboseEnv)
-    Right (adefs,names) -> do
+    Resolved (adefs,names) -> do
       (merr,tenv) <- TC.runDeclss TC.verboseEnv adefs
       case merr of
         Just err -> putStrLn $ render $ sep ["Type checking failed:",err]
@@ -113,7 +114,7 @@ loop flags f names tenv@(TC.TEnv _ rho _ _ _) = do
     Just str   -> case pExp (lexer str) of
       Bad err -> outputStrLn ("Parse error: " ++ err) >> loop flags f names tenv
       Ok  exp ->
-        case runResolver $ local (insertBinders names) $ resolveExp exp of
+        case runResolver [] {- FIXME -} "<interactive>" $ local (insertBinders names) $ resolveExp exp of
           Left  err  -> do outputStrLn (render ("Resolver failed:" </> err))
                            loop flags f names tenv
           Right body -> do
@@ -127,36 +128,32 @@ loop flags f names tenv@(TC.TEnv _ rho _ _ _) = do
               liftIO $ putStrLn (render ("EVAL:" </> pretty e))
               loop flags f names tenv
 
--- (not ok,loaded,already loaded defs) -> to load ->
---   (new not ok, new loaded, new defs)
--- the bool determines if it should be verbose or not
-imports :: Bool -> ([String],[String],[Module]) -> String ->
-           IO ([String],[String],[Module])
-imports v st@(notok,loaded,mods) f
-  | f `elem` notok  = putStrLn ("Looping imports in " ++ f) >> return ([],[],[])
-  | f `elem` loaded = return st
-  | otherwise       = do
-    b <- doesFileExist f
-    let prefix = dropFileName f
-    if not b
-      then putStrLn (f ++ " does not exist") >> return ([],[],[])
-      else do
-        s <- readFile f
-        let ts = lexer s
-        case pModule ts of
-          Bad s  -> do
-            putStrLn $ "Parse failed in " ++ show f ++ "\n" ++ show s
-            return ([],[],[])
-          Ok mod@(Module id imp decls) ->
-            let name    = unAIdent id
-                imp_cub = [prefix ++ unAIdent i ++ ".tt" | Import i <- imp]
-            in do
-              when (name /= dropExtension (takeFileName f)) $
-                error $ "Module name mismatch " ++ show (f,name)
-              (notok1,loaded1,mods1) <-
-                foldM (imports v) (f:notok,loaded,mods) imp_cub
-              when v $ putStrLn $ "Parsed " ++ show f ++ " successfully!"
-              return (notok,f:loaded1,mods1 ++ [mod])
+load :: String -> FilePath -> StateT Modules IO ModuleState
+load prefix f = do
+  (ms::Modules) <- get :: StateT Modules IO Modules
+  case lookup f ms of
+    Just Loading -> return $ Failed "cycle in imports"
+    Just r@(Resolved _) -> return r
+    Nothing -> do
+      let fname = (prefix FP.</> f <.> "tt")
+      b <- liftIO $ doesFileExist fname
+      if not b
+        then return $ Failed $ sep ["file not found: ", fromString fname]
+        else do
+          s <- liftIO $ readFile fname
+          let ts = lexer s
+          case pModule ts of
+              Bad s  -> do
+                return $ Failed $ sep ["Parse failed in", fromString f, fromString s]
+              Ok m@(Module imp _) -> do
+                forM_ imp $ \(Import i) -> load prefix (unAIdent i)
+                ms' <- get
+                case runResolver ms' f (resolveModule m) of
+                  Left err -> return $ Failed $ sep ["Resolver error:", err]
+                  Right x -> do
+                    modify $ ((f,Resolved x):)
+                    return (Resolved x)
+
 
 help :: String
 help = "\nAvailable commands:\n" ++

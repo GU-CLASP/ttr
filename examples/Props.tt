@@ -1,4 +1,4 @@
-module Props where
+module where
 
 Bot : Type  -- do not move this type (at all!) otherwise it won't be found by primops.
 data Bot =

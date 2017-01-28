@@ -14,6 +14,7 @@ import Control.Monad.Except (throwError)
 import Control.Monad (when)
 import Data.Functor.Identity
 import Data.List (nub)
+import Data.Map (Map)
 
 type Tele = [(AIdent,Exp)]
 type Ter  = C.Ter
@@ -67,20 +68,14 @@ data SymKind = Variable | Constructor Arity
   deriving (Eq,Show)
 
 -- local environment for constructors
-data Env = Env { envModule :: String,
+data Env = Env { envFile :: String,
+                 envModules :: Modules,
                  variables :: [(C.Binder,SymKind)] }
-  deriving (Eq, Show)
 
 type Resolver a = ReaderT Env (ExceptT D Identity) a
 
-emptyEnv :: Env
-emptyEnv = Env "" []
-
-runResolver :: Resolver a -> Either D a
-runResolver x = runIdentity $ runExceptT $ runReaderT x emptyEnv
-
-updateModule :: String -> Env -> Env
-updateModule modu e = e {envModule = modu}
+runResolver :: Modules -> FilePath -> Resolver a -> Either D a
+runResolver ms f x = runIdentity $ runExceptT $ runReaderT x (Env f ms [])
 
 insertBinder :: (C.Binder,SymKind) -> Env -> Env
 insertBinder (x@(n,_),var) e
@@ -103,7 +98,7 @@ insertCons :: [(C.Binder,Arity)] -> Env -> Env
 insertCons = flip $ foldr insertCon
 
 getModule :: Resolver String
-getModule = envModule <$> ask
+getModule = envFile <$> ask
 
 getVariables :: Resolver [(C.Binder,SymKind)]
 getVariables = variables <$> ask
@@ -254,13 +249,18 @@ resolveDecls (DeclMutual defs : ds) = do
   return (rdefs : rds, names' ++ names)
 resolveDecls (decl:_) = throwError $ "Invalid declaration:" <+> showy decl
 
-resolveModule :: Module -> Resolver ([C.Decls],[(C.Binder,SymKind)])
-resolveModule (Module n _imports decls) =
-  local (updateModule $ unAIdent n) $ resolveDecls decls
+data ModuleState
+  = Resolved {resolvedDecls :: ([C.Decls],[(C.Binder,SymKind)])}
+  | Loading
+  | Failed D
 
-resolveModules :: [Module] -> Resolver ([C.Decls],[(C.Binder,SymKind)])
-resolveModules []         = return ([],[])
-resolveModules (modu:mods) = do
-  (rmod, names)  <- resolveModule modu
-  (rmods,names') <- local (insertBinders names) $ resolveModules mods
-  return (rmod ++ rmods, names' ++ names)
+type Modules = [(FilePath,ModuleState)]
+
+imports (Import i:is) k = do
+  ms <- asks envModules
+  case lookup (unAIdent i) ms of
+      Just (Resolved (ds,ns)) -> local (insertBinders ns) $ imports is k
+imports [] k = k
+
+resolveModule :: Module -> Resolver ([C.Decls],[(C.Binder,SymKind)]) 
+resolveModule (Module is decls) = imports is $ resolveDecls decls
