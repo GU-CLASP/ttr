@@ -7,7 +7,7 @@ layout "where", "let", "split", "mutual" ;
 layout stop "in" ;
 -- Do not use layout toplevel as it makes pExp fail!
 
-Module.   Module ::= "module" AIdent "where" "{" [Imp] [Decl] "}" ;
+Module.   Module ::= "module" "where" "{" [Imp] [Decl] "}" ;
 
 Import.   Imp ::= "import" AIdent ;
 separator Imp ";" ;
