@@ -59,11 +59,6 @@ addC gam _             []          = return gam
 addC gam ((y,a):as,nu) ((x,u):xus) = 
   addC ((x,eval nu a):gam) (as,Pair nu (y,u)) xus
 
-addBranch :: [(Binder,Val)] -> (Tele,Env) -> TEnv -> Typing TEnv
-addBranch nvs (tele,env) (TEnv k rho gam ex v) = do
-  e <- addC gam (tele,env) nvs
-  return $ TEnv (k + length nvs) (upds rho nvs) e ex v
-
 addDecls :: Decls -> TEnv -> Typing TEnv
 addDecls d (TEnv k rho gam ex v) = do
   let rho1 = PDef [ (x,y) | (x,_,y) <- d ] rho
@@ -88,7 +83,7 @@ runDecls tenv d = runTyping tenv $ do
   checkDecls d
   addDecls d tenv
 
-runDeclss :: TEnv -> [Decls] -> IO (Maybe D,TEnv)
+runDeclss ::  TEnv -> [Decls] -> IO (Maybe D,TEnv)
 runDeclss tenv []         = return (Nothing, tenv)
 runDeclss tenv (d:ds) = do
   x <- runDecls tenv d
@@ -100,7 +95,7 @@ runInfer :: TEnv -> Ter -> IO (Either D Val)
 runInfer lenv e = runTyping lenv (checkInfer e)
 
 -- Extract the type of a label as a closure
-getLblType :: String -> Val -> Typing (Tele, Env)
+getLblType :: String -> Val -> Typing (Ter, Env)
 getLblType c (Ter (Sum _ cas) r) = case getIdent c cas of
   Just as -> return (as,r)
   Nothing -> oops ("getLblType" <+> pretty c)
@@ -136,16 +131,16 @@ checkLogg v t = logg (sep ["Checking that " <> pretty t, "has type " <> pretty v
 
 check :: Val -> Ter -> Typing ()
 check a t = case (a,t) of
-  (_,Con c es) -> do
-    (bs,nu) <- getLblType c a
-    checks (bs,nu) es
-  (VU,Sum _ bs) -> sequence_ [checkTele as | (_,as) <- bs]
+  (_,Con c e) -> do
+    (b,nu) <- getLblType c a
+    check (eval nu b) e
+  (VU,Sum _ bs) -> sequence_ [checkType a | (_,a) <- bs]
   (VPi _ (Ter (Sum _ cas) nu) f,Split _ ces) -> do
     let cas' = sortBy (compare `on` fst . fst) cas
         ces' = sortBy (compare `on` fst) ces
     if map (fst . fst) cas' == map fst ces'
-       then sequence_ [ checkBranch (as,nu) f brc
-                      | (brc, (_,as)) <- zip ces' cas' ]
+       then sequence_ [ check (VPi "" (eval nu typ) f) (Lam bndr term)
+                      | ((_lbl1,(bndr,term)), ((_lbl2,_),typ)) <- zip ces' cas' ]
        else oops "case branches does not match the data type"
   (VPi _ a f,Lam x t)  -> do
     var <- getFresh
@@ -193,19 +188,13 @@ checkSub msg a v = do
       Just err -> do
         oops $ sep ["In" <+> msg, pretty v <> " is not a subtype of " <> pretty a, "because " <> err]
 
-checkBranch :: (Tele,Env) -> Val -> Brc -> Typing ()
-checkBranch (xas,nu) f (c,(xs,e)) = do
-  k   <- asks index
-  let l  = length xas
-      us = map mkVar [k..k+l-1]
-  localM (addBranch (zip xs us) (xas,nu)) $ check (app f (VCon c us)) e
-
 inferType :: Ter -> Typing Val
 inferType t = do
   a <- checkInfer t
   case a of
    VU -> return a
-   _ -> oops $ pretty a <> " is not a type"
+   _ -> oops $ sep ["expected a type, but got", pretty t, "which as type",pretty a]
+
 
 -- | Infer the type of the argument
 checkInfer :: Ter -> Typing Val
@@ -271,8 +260,4 @@ checks ((x,a):xas,nu) (e:es) = do
 checks _              _      = oops "checks"
 
 checkType :: Ter -> Typing ()
-checkType t = do
-  t' <- inferType t
-  case t' of
-    VU -> oops $ "type expected but got" <> pretty t'
-    _ -> return ()
+checkType t = inferType t >> return ()

@@ -1,22 +1,23 @@
 module Lists where
 
 List : Type -> Type
-data List a = nil | cons (head : a) (tail : List a)
+List a = { nil [] | cons [head : a; tail : List a]}
 
 zipWith : (a b c : Type) -> (a -> b -> c) -> List a -> List b -> List c
 zipWith a b c f = zip'
   where
     zip' : List a -> List b -> List c
     zip' = split
-      nil -> \_ -> nil
-      cons x xs -> split
-        nil -> nil
-        cons y ys -> cons (f x y) (zip' xs ys)
+      nil _ -> \_ -> 'nil ()
+      cons x -> split
+        nil _ -> 'nil ()
+        cons y -> 'cons (head = f x.head y.head,
+                         tail = zip' x.tail y.tail)
 
 
 foldr : (a b : Type) -> List a -> (a -> b -> b) -> b -> b
 foldr a b xs f k = go xs
   where go : List a -> b
         go = split
-           nil -> k
-           cons x xs -> f x (go xs)
+           nil _ -> k
+           cons x -> f x.head (go x.tail)

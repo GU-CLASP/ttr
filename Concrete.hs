@@ -7,7 +7,6 @@ import Exp.Abs
 import qualified TT as C
 import Pretty
 
-import Control.Arrow (second)
 import Control.Monad.Trans.Reader
 import Control.Monad.Trans.Except
 import Control.Monad.Except (throwError)
@@ -114,15 +113,6 @@ getLoc l = C.Loc <$> getModule <*> pure l
 resolveBinder :: AIdent -> Resolver C.Binder
 resolveBinder (AIdent (l,x)) = (x,) <$> getLoc l
 
--- Eta expand constructors
-expandConstr :: Arity -> String -> [Exp] -> Resolver Ter
-expandConstr a x es = do
-  let r       = a - length es
-      binders = map (('_' :) . show) [1..r]
-      args    = map C.Var binders
-  ts <- mapM resolveExp es
-  return $ C.mkLams binders $ C.mkApps (C.Con x []) (ts ++ args)
-
 resolveVar :: AIdent -> Resolver Ter
 resolveVar (AIdent (l,x))
   | (x == "_") || (x == "undefined") = C.Undef <$> getLoc l
@@ -131,7 +121,6 @@ resolveVar (AIdent (l,x))
     vars    <- getVariables
     case C.getIdent x vars of
       Just Variable        -> return $ C.Var x
-      Just (Constructor a) -> expandConstr a x []
       _ -> throwError $ 
         "Cannot resolve variable" <+> pretty x <+> "at position" <+>
         pretty l <+> "in module" <+> pretty modName
@@ -157,7 +146,6 @@ resolveExp (App t s)    = case unApps t [s] of
     -- eta expand too much
     vars    <- getVariables
     case C.getIdent n vars of
-      Just (Constructor a) -> expandConstr a n xs
       _ -> C.mkApps <$> resolveExp x <*> mapM resolveExp xs
   (x,xs) -> C.mkApps <$> resolveExp x <*> mapM resolveExp xs
 
@@ -183,6 +171,11 @@ resolveExp (Real r) = return (C.Real r)
 resolveExp (PrimOp p) = return (C.Prim p)
 resolveExp (And t u) = C.Meet <$> resolveExp t <*> resolveExp u
 resolveExp (Or t u) = C.Join <$> resolveExp t <*> resolveExp u
+resolveExp (Con (AIdent (_,n)) t) = C.Con n <$> resolveExp t
+resolveExp (Sum labs) = do
+  labs' <- mapM resolveLabel labs
+  loc <- getLoc (case labs of Label (AIdent (l,_)) _:_ -> l ; _ -> (0,0))
+  return $ C.Sum loc labs'
 
 resolveExps :: [Exp] -> Resolver [Ter]
 resolveExps ts = traverse resolveExp ts
@@ -190,11 +183,11 @@ resolveExps ts = traverse resolveExp ts
 resolveWhere :: ExpWhere -> Resolver Ter
 resolveWhere = resolveExp . unWhere
 
-resolveBranch :: Branch -> Resolver (C.Label,([C.Binder],C.Ter))
+resolveBranch :: Branch -> Resolver (C.Label,(C.Binder,C.Ter))
 resolveBranch (Branch lbl args e) = do
-    binders <- mapM resolveBinder args
-    re      <- local (insertVars binders) $ resolveWhere e
-    return (unAIdent lbl, (binders, re))
+    binder <- resolveBinder args
+    re      <- local (insertVar binder) $ resolveWhere e
+    return (unAIdent lbl, (binder, re))
 
 resolveTele :: [(AIdent,Exp)] -> Resolver C.Tele
 resolveTele []        = return []
@@ -202,38 +195,30 @@ resolveTele ((i,d):t) = do
   x <- resolveBinder i
   ((x,) <$> resolveExp d) <:> local (insertVar x) (resolveTele t)
 
-resolveLabel :: Label -> Resolver (C.Binder, C.Tele)
-resolveLabel (Label n vdecl) =
-  (,) <$> resolveBinder n <*> resolveTele (vTele vdecl)
-
-declsLabels :: [Decl] -> Resolver [(C.Binder,Arity)]
-declsLabels decls = do
-  let sums = concat [sumTyp | DeclData _ _ sumTyp <- decls]
-  sequence [ (,length args) <$> resolveBinder lbl | Label lbl args <- sums ]
+resolveLabel :: Label -> Resolver (C.Binder, C.Ter)
+resolveLabel (Label n x) =
+  (,) <$> resolveBinder n <*> resolveExp x
 
 -- Resolve Data or Def declaration
 resolveDDecl :: Decl -> Resolver (C.Ident, C.Ter)
 resolveDDecl (DeclDef  (AIdent (_,n)) args body) =
   (n,) <$> lams args (resolveWhere body)
-resolveDDecl (DeclData x@(AIdent (_,n)) args sumTyp) =
-  (n,) <$> (lams args (C.Sum <$> resolveBinder x <*> mapM resolveLabel sumTyp))
 resolveDDecl d = throwError $ "Definition expected" <+> showy d
 
 -- Resolve mutual declarations (possibly one)
 resolveMutuals :: [Decl] -> Resolver (C.Decls,[(C.Binder,SymKind)])
 resolveMutuals decls = do
     binders <- mapM resolveBinder idents
-    cs      <- declsLabels decls
-    let cns = map (fst . fst) cs ++ names
+    let cns = names
     when (nub cns /= cns) $
       throwError $ "Duplicated constructor or ident:" <+> showy cns
     rddecls <-
-      mapM (local (insertVars binders . insertCons cs) . resolveDDecl) ddecls
+      mapM (local (insertVars binders) . resolveDDecl) ddecls
     when (names /= map fst rddecls) $
       throwError $ "Mismatching names in" <+> showy decls
     rtdecls <- resolveTele tdecls
     return ([ (x,t,d) | (x,t) <- rtdecls | (_,d) <- rddecls ],
-            map (second Constructor) cs ++ map (,Variable) binders)
+            map (,Variable) binders)
   where
     idents = [ x | DeclType x _ <- decls ]
     names  = [ unAIdent x | x <- idents ]

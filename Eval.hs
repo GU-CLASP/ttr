@@ -33,7 +33,7 @@ eval e (RecordT bs)      = VRecordT $ evalTele e bs
 eval e (Record fs)     = VRecord [(l,eval e x) | (l,x) <- fs]
 eval e (Proj l a)        = projVal l (eval e a)
 eval e (Where t decls) = eval (PDef [ (x,y) | (x,_,y) <- decls ] e) t
-eval e (Con name ts)   = VCon name (map (eval e) ts)
+eval e (Con name ts)   = VCon name (eval e ts)
 eval e (Split pr alts) = Ter (Split pr alts) e
 eval e (Sum pr ntss)   = Ter (Sum pr ntss) e
 eval _ (Undef _)       = error "undefined (2)"
@@ -76,7 +76,7 @@ positive :: Val -> Val
 positive v = abstract ">=0" [v]
 
 bot :: Val
-bot = Ter (Sum ("Bot",Loc "Props" (4,6)) []) Empty
+bot = Ter (Sum (Loc "Props" (0,0)) []) Empty
 
 infixr -->
 (-->) :: Val -> Val -> Val
@@ -161,8 +161,8 @@ joinFields _ VBot = VBot
 app :: Val -> Val -> Val
 app (VLam _ f) u = f u
 -- app (Ter (Lam cs x t) e) u = eval (Pair e (x,u)) t
-app (Ter (Split _ nvs) e) (VCon name us) = case lookup name nvs of
-    Just (xs,t) -> eval (upds e (zip xs us)) t
+app (Ter (Split _ nvs) e) (VCon name u) = case lookup name nvs of
+    Just (x,t) -> eval (Pair e (x,u)) t
     Nothing -> error $ "app: Split with insufficient arguments; " ++
                         "missing case for " ++ name
 app u@(Ter (Split _ _) _) v | isNeutral v = VSplit u v -- v should be neutral
@@ -229,7 +229,7 @@ conv k (VRecordT fs) (VRecordT fs') =
   convTele k fs fs'
 conv k (VProj l u) (VProj l' u') = equal l l' <> conv k u u'
 conv k (VCon c us) (VCon c' us') =
-  (c `equal` c') <> mconcat (zipWith (conv k) us us')
+  (c `equal` c') <> (conv k us us')
 conv k (VRecord fs) (VRecord fs') = convFields k fs fs'
 conv k (VApp u v)   (VApp u' v')   = conv k u u' <> conv k v v'
 conv k (VSplit u v) (VSplit u' v') = conv k u u' <> conv k v v'
@@ -293,7 +293,7 @@ showVal ctx t0 = case t0 of
   (VJoin u v)  -> pp 2 (\p -> p u <+> "\\/" <+> p v)
   (VMeet u v)  -> pp 3 (\p -> p u <+> "/\\" <+> p v)
   (Ter t env)  -> showTer ctx env t
-  (VCon c us)  -> prn 4 (pretty c <+> showArgs us)
+  (VCon c us)  -> prn 4 ("`" <> pretty c <+> showVal 5 us)
   (VPi nm a f) -> pp 1 $ \p ->
      if dependent f then withVar nm $ \v -> (parens (pretty v <> ":" <> pretty a) <+> "->") </> p (f `app` (VVar v))
      else (showVal 2 a  <+> "->") </> p (f `app` (VVar "_"))
@@ -369,9 +369,9 @@ showTer ctx ρ t0 = case t0 of
    (Record fs)   -> encloseSep "(" ")" "," [pretty l <> " = " <> showTer 0 ρ e | (l,e) <- fs]
    (Where e d)   -> pp 0 (\p -> p e <+> "where" <+> showDecls ρ d)
    (Var x)       -> prettyLook x ρ
-   (Con c es)    -> pretty c <+> showTersArgs ρ es
+   (Con c es)    -> "`" <> pretty c <+> showTer 5 ρ es
    (Split _l branches)   -> hang 2 "split"  $ showSplitBranches ρ branches
-   (Sum (_name,_) branches) -> encloseSep "{" "}" "| " (map (showBranch ρ) branches)
+   (Sum _l branches) -> encloseSep "{" "}" "| " (map (showBranch ρ) branches)
    (Undef _)     -> "undefined (1)"
    (Real r)      -> showy r
    (Prim n)      -> showy n
@@ -379,12 +379,12 @@ showTer ctx ρ t0 = case t0 of
        pp opPrec k = prn opPrec (k (showTer opPrec ρ))
        prn opPrec = (if opPrec < ctx then parens else id)
 
-
 showSplitBranches ρ branches = encloseSep "{" "}" ";"
-  [hang 2 (pretty l <+> sep (map (pretty . fst) bnds) <+> "↦") (showTer 0 ρ t)  | (l,(bnds,t)) <- branches]
-  
-showBranch :: Env -> (Binder, Tele) -> D
-showBranch env ((b,_),tele) = pretty b <+> sep (map parens (showTele env tele))
+  [hang 2 (pretty l <+> ((pretty . fst) bnds) <+> "↦") (showTer 0 ρ t)  | (l,(bnds,t)) <- branches]
+
+showBranch :: Env -> (Binder, Ter) -> D
+showBranch env ((b,_),arg) = pretty b <+> (showTer 0 env arg)
+
 instance Pretty Loc where
   pretty (Loc x l) = pretty x <> "@" <> pretty l
 
@@ -406,7 +406,7 @@ instance Value Val where
     VPi _ x y -> unknowns x ++ unknowns y
     VRecordT x -> unknowns x
     VRecord x -> concatMap (unknowns . snd) x
-    VCon _ x -> concatMap unknowns x
+    VCon _ x -> unknowns x
     VApp x y -> unknowns x ++ unknowns y
     VSplit x y -> unknowns x ++ unknowns y
     VProj _ x -> unknowns x

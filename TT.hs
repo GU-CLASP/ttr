@@ -2,8 +2,6 @@
 {-# LANGUAGE PatternSynonyms, OverloadedStrings #-}
 module TT where
 
-import Data.Monoid hiding (Sum)
-import Pretty
 import Data.Dynamic
 
 -- | Terms
@@ -24,13 +22,13 @@ noLoc :: String -> Binder
 noLoc x = (x, Loc "" (0,0))
 
 -- Branch of the form: c x1 .. xn -> e
-type Brc    = (Label,([Binder],Ter))
+type Brc    = (Label,(Binder,Ter))
 
 -- Telescope (x1 : A1) .. (xn : An)
 type Tele   = [(Binder,Ter)]
 
--- Labelled sum: c (x1 : A1) .. (xn : An)
-type LblSum = [(Binder,Tele)]
+-- Labelled sum: c A1
+type LblSum = [(Binder,Ter)]
 
 -- Context gives type values to identifiers
 type Ctxt   = [(Binder,Val)]
@@ -61,11 +59,11 @@ data Ter = App Ter Ter
          | Var Ident
          | U
          -- constructor c Ms
-         | Con Label [Ter]
+         | Con Label Ter
          -- branches c1 xs1  -> M1,..., cn xsn -> Mn
          | Split Loc [Brc]
          -- labelled sum c1 A1s,..., cn Ans (assumes terms are constructors)
-         | Sum Binder LblSum
+         | Sum Loc LblSum
          | Undef Loc
          | Prim String
          | Real Double
@@ -75,7 +73,6 @@ data Ter = App Ter Ter
   deriving (Eq)
 
 mkApps :: Ter -> [Ter] -> Ter
-mkApps (Con l us) vs = Con l (us ++ vs)
 mkApps t ts          = foldl App t ts
 
 mkLams :: [String] -> Ter -> Ter
@@ -96,7 +93,7 @@ data Val = VU
          | VPi String Val Val
          | VRecordT VTele
          | VRecord [(String,Val)]
-         | VCon Ident [Val]
+         | VCon Ident Val
          | VApp Val Val            -- the first Val must be neutral
          | VSplit Val Val          -- the second Val must be neutral
          | VVar String
