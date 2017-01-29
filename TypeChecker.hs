@@ -7,13 +7,25 @@ import Data.List
 import Data.Monoid hiding (Sum)
 import Control.Monad
 import Control.Monad.Trans
-import Control.Monad.Trans.Except hiding (throwError)
+import Control.Monad.Trans.Except
 import Control.Monad.Trans.Reader
 import Control.Monad.Except
 import Pretty
+import Exp.Abs (Imp(..))
 
 import TT
 import Eval
+
+import Pretty
+
+data ModuleState
+  = Loaded {resolvedDecls :: ([Decls],[Binder])
+           ,checkedEnv :: TEnv}
+  | Loading
+  | Failed D
+
+type Modules = [(FilePath,ModuleState)]
+
 
 -- Type checking monad
 type Typing a = ReaderT TEnv (ExceptT D IO) a
@@ -54,17 +66,17 @@ addTypeVal p@(x,_) (TEnv k rho gam ex v) =
 addType :: (Binder,Ter) -> TEnv -> Typing TEnv
 addType (x,a) tenv@(TEnv _ rho _ _ _) = return $ addTypeVal (x,eval rho a) tenv
 
-addC :: Ctxt -> (Tele,Env) -> [(Binder,Val)] -> Typing Ctxt
-addC gam _             []          = return gam
+addC :: Ctxt -> (Tele,Env) -> [(Binder,Val)] -> Ctxt
+addC gam _             []          = gam
 addC gam ((y,a):as,nu) ((x,u):xus) = 
   addC ((x,eval nu a):gam) (as,Pair nu (y,u)) xus
 
-addDecls :: Decls -> TEnv -> Typing TEnv
+addDecls :: Decls -> TEnv -> TEnv
 addDecls d (TEnv k rho gam ex v) = do
   let rho1 = PDef [ (x,y) | (x,_,y) <- d ] rho
       es' = evals rho1 (declDefs d)
-  gam' <- addC gam (declTele d,rho) es'
-  return $ TEnv k rho1 gam' ex v
+  let gam' = addC gam (declTele d,rho) es'
+  TEnv k rho1 gam' ex v
 
 addTele :: Tele -> TEnv -> Typing TEnv
 addTele xas lenv = foldM (flip addType) lenv xas
@@ -77,11 +89,17 @@ trace s = do
 runTyping :: TEnv -> Typing a -> IO (Either D a)
 runTyping env t = runExceptT $ runReaderT t env
 
--- Used in the interaction loop
+checkModule :: Modules -> TEnv -> [String] -> [Decls] -> IO (Maybe D,TEnv)
+checkModule ms tenv [] dcls = runDeclss tenv dcls
+checkModule ms tenv (i:is) dcls = do
+  case lookup i ms of
+    Just (Loaded (dss,_) _) -> do
+      checkModule ms ((foldl (flip addDecls) tenv dss)) is dcls
+
 runDecls :: TEnv -> Decls -> IO (Either D TEnv)
 runDecls tenv d = runTyping tenv $ do
   checkDecls d
-  addDecls d tenv
+  return (addDecls d tenv)
 
 runDeclss ::  TEnv -> [Decls] -> IO (Maybe D,TEnv)
 runDeclss tenv []         = return (Nothing, tenv)
@@ -123,7 +141,7 @@ checkDecls d = do
 checkTele :: Tele -> Typing ()
 checkTele []          = return ()
 checkTele ((x,a):xas) = do
-  inferType a
+  _ <- inferType a
   localM (addType (x,a)) $ checkTele xas
 
 checkLogg :: Val -> Ter -> Typing ()
@@ -134,7 +152,7 @@ check a t = case (a,t) of
   (_,Con c e) -> do
     (b,nu) <- getLblType c a
     check (eval nu b) e
-  (VU,Sum _ bs) -> sequence_ [checkType a | (_,a) <- bs]
+  (VU,Sum _ bs) -> sequence_ [inferType a | (_,a) <- bs]
   (VPi _ (Ter (Sum _ cas) nu) f,Split _ ces) -> do
     let cas' = sortBy (compare `on` fst . fst) cas
         ces' = sortBy (compare `on` fst) ces
@@ -153,7 +171,7 @@ check a t = case (a,t) of
                    throwError $ sep [e1,"AND",e2]
   (_,Where e d) -> do
     checkDecls d
-    localM (addDecls d) $ check a e
+    local (addDecls d) $ check a e
   (_,Undef _) -> return ()
   _ -> do
     logg (sep ["Checking that" <+> pretty t, "has type" <+> pretty a]) $ do
@@ -239,7 +257,7 @@ checkInfer e = case e of
     return VU
   Where t d -> do
     checkDecls d
-    localM (addDecls d) $ checkInfer t
+    local (addDecls d) $ checkInfer t
   _ -> oops ("checkInfer " <> pretty e)
 
 checkInferProj :: String -> {- ^ field to project-} Val -> {- ^ record value-} VTele -> {- ^ record type-} Typing Val
@@ -258,6 +276,3 @@ checks ((x,a):xas,nu) (e:es) = do
   let v' = eval rho e
   checks (xas,Pair nu (x,v')) es
 checks _              _      = oops "checks"
-
-checkType :: Ter -> Typing ()
-checkType t = inferType t >> return ()

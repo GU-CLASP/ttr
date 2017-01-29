@@ -13,7 +13,7 @@ import Control.Monad.Except (throwError)
 import Control.Monad (when)
 import Data.Functor.Identity
 import Data.List (nub)
-import Data.Map (Map)
+import TypeChecker (Modules,ModuleState(..))
 
 type Tele = [(AIdent,Exp)]
 type Ter  = C.Ter
@@ -61,29 +61,29 @@ pseudoTele (PseudoTDecl expr typ : pd) = do
 -------------------------------------------------------------------------------
 -- | Resolver and environment
 
-data SymKind = Variable
+data SymKind = Variable -- TODO: delete
   deriving (Eq,Show)
 
 -- local environment for constructors
 data Env = Env { envFile :: String,
                  envModules :: Modules,
-                 variables :: [(C.Binder,SymKind)] }
+                 variables :: [(C.Binder)] }
 
 type Resolver a = ReaderT Env (ExceptT D Identity) a
 
 runResolver :: Modules -> FilePath -> Resolver a -> Either D a
 runResolver ms f x = runIdentity $ runExceptT $ runReaderT x (Env f ms [])
 
-insertBinder :: (C.Binder,SymKind) -> Env -> Env
-insertBinder (x@(n,_),var) e
+insertBinder :: (C.Binder) -> Env -> Env
+insertBinder (x@(n),var) e
   | n == "_" || n == "undefined" = e
   | otherwise                    = e {variables = (x, var) : variables e}
 
-insertBinders :: [(C.Binder,SymKind)] -> Env -> Env
+insertBinders :: [(C.Binder)] -> Env -> Env
 insertBinders = flip $ foldr insertBinder
 
 insertVar :: C.Binder -> Env -> Env
-insertVar x = insertBinder (x,Variable)
+insertVar x = insertBinder (x)
 
 insertVars :: [C.Binder] -> Env -> Env
 insertVars = flip $ foldr insertVar
@@ -92,7 +92,7 @@ getModule :: Resolver String
 getModule = envFile <$> ask
 
 getVariables :: Resolver [(C.Binder,SymKind)]
-getVariables = variables <$> ask
+getVariables = (\n -> zip n (repeat Variable)) . variables <$> ask
 
 getLoc :: (Int,Int) -> Resolver C.Loc
 getLoc l = C.Loc <$> getModule <*> pure l
@@ -185,7 +185,7 @@ resolveDDecl (DeclDef  (AIdent (_,n)) args body) =
 resolveDDecl d = throwError $ "Definition expected" <+> showy d
 
 -- Resolve mutual declarations (possibly one)
-resolveMutuals :: [Decl] -> Resolver (C.Decls,[(C.Binder,SymKind)])
+resolveMutuals :: [Decl] -> Resolver (C.Decls,[(C.Binder)])
 resolveMutuals decls = do
     binders <- mapM resolveBinder idents
     let cns = names
@@ -196,8 +196,7 @@ resolveMutuals decls = do
     when (names /= map fst rddecls) $
       throwError $ "Mismatching names in" <+> showy decls
     rtdecls <- resolveTele tdecls
-    return ([ (x,t,d) | (x,t) <- rtdecls | (_,d) <- rddecls ],
-            map (,Variable) binders)
+    return ([ (x,t,d) | (x,t) <- rtdecls | (_,d) <- rddecls ], binders)
   where
     idents = [ x | DeclType x _ <- decls ]
     names  = [ unAIdent x | x <- idents ]
@@ -206,7 +205,7 @@ resolveMutuals decls = do
     isTDecl d = case d of DeclType{} -> True; _ -> False
 
 -- Resolve declarations
-resolveDecls :: [Decl] -> Resolver ([C.Decls],[(C.Binder,SymKind)])
+resolveDecls :: [Decl] -> Resolver ([C.Decls],[(C.Binder)])
 resolveDecls []                   = return ([],[])
 resolveDecls (td@DeclType{}:d:ds) = do
     (rtd,names)  <- resolveMutuals [td,d]
@@ -218,18 +217,11 @@ resolveDecls (DeclMutual defs : ds) = do
   return (rdefs : rds, names' ++ names)
 resolveDecls (decl:_) = throwError $ "Invalid declaration:" <+> showy decl
 
-data ModuleState
-  = Resolved {resolvedDecls :: ([C.Decls],[(C.Binder,SymKind)])}
-  | Loading
-  | Failed D
-
-type Modules = [(FilePath,ModuleState)]
-
 imports (Import i:is) k = do
   ms <- asks envModules
   case lookup (unAIdent i) ms of
-      Just (Resolved (ds,ns)) -> local (insertBinders ns) $ imports is k
+      Just (Loaded (_,ns) _) -> local (insertBinders ns) $ imports is k
 imports [] k = k
 
-resolveModule :: Module -> Resolver ([C.Decls],[(C.Binder,SymKind)]) 
+resolveModule :: Module -> Resolver ([C.Decls],[(C.Binder)]) 
 resolveModule (Module is decls) = imports is $ resolveDecls decls
