@@ -60,9 +60,7 @@ pseudoTele (PseudoTDecl expr typ : pd) = do
 -------------------------------------------------------------------------------
 -- | Resolver and environment
 
-type Arity = Int
-
-data SymKind = Variable | Constructor Arity
+data SymKind = Variable
   deriving (Eq,Show)
 
 -- local environment for constructors
@@ -94,12 +92,6 @@ insertVar x = insertBinder (x,Variable)
 
 insertVars :: [C.Binder] -> Env -> Env
 insertVars = flip $ foldr insertVar
-
-insertCon :: (C.Binder,Arity) -> Env -> Env
-insertCon (x,a) = insertBinder (x,Constructor a)
-
-insertCons :: [(C.Binder,Arity)] -> Env -> Env
-insertCons = flip $ foldr insertCon
 
 getModule :: Resolver String
 getModule = envModule <$> ask
