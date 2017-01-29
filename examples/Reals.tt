@@ -24,4 +24,4 @@ Positive : Real -> Type
 Positive = primitive "#>=0"
 
 decidePositivity : (x : Real) -> Dec (Positive x)
-decidePositivity x = (primitive "positive?") x (Dec (Positive x)) yes no
+decidePositivity x = (primitive "positive?") x (Dec (Positive x)) (\z -> 'yes z) (\z -> 'no z)

@@ -72,9 +72,6 @@ data Ter = App Ter Ter
 
   deriving (Eq)
 
-mkApps :: Ter -> [Ter] -> Ter
-mkApps t ts          = foldl App t ts
-
 mkLams :: [String] -> Ter -> Ter
 mkLams bs t = foldr Lam t [ noLoc b | b <- bs ]
 

@@ -132,15 +132,7 @@ binds f = flip $ foldr $ bind f
 resolveExp :: Exp -> Resolver Ter
 resolveExp U            = return C.U
 resolveExp (Var x)      = resolveVar x
-resolveExp (App t s)    = case unApps t [s] of
-  (x@(Var (AIdent (_,n))),xs) -> do
-    -- Special treatment in the case of a constructor in order not to
-    -- eta expand too much
-    vars    <- getVariables
-    case C.getIdent n vars of
-      _ -> C.mkApps <$> resolveExp x <*> mapM resolveExp xs
-  (x,xs) -> C.mkApps <$> resolveExp x <*> mapM resolveExp xs
-
+resolveExp (App t s)    = C.App <$> resolveExp t <*> resolveExp s
 resolveExp (Record t)  = case pseudoTele t of
   Just tele -> C.RecordT <$> resolveTele tele
   Nothing   -> throwError "Telescope malformed in Sigma"

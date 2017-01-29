@@ -11,7 +11,7 @@ kappa : [w : List Real;
          c : List Real -> Class]
 kappa = (w = w, t = t, c = c)
   where w : List Real
-        w = cons 0.800 (cons 0.010 nil)
+        w = 'cons (head = 0.800, tail = 'cons (head = 0.010, tail = 'nil ()))
         t : Real
         t = 0.090
         f : (v : List Real) -> Dec (Positive (subtract t (dotProd w v)))
