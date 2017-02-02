@@ -11,6 +11,7 @@ import Data.Monoid hiding (Sum)
 import Data.Dynamic
 import Prelude hiding (pi)
 
+-- | Lookup a value in the environment
 look :: Ident -> Env -> (Binder, Val)
 look x (Pair rho (n@(y,_l),u))
   | x == y    = (n, u)
@@ -25,14 +26,14 @@ eval :: Env -> Ter -> Val
 eval _ U               = VU
 eval e (App r s)       = app (eval e r) (eval e s)
 eval e (Var i)         = snd (look i e)
-eval e (Pi a b)        = VPi (eval e a) (eval e b)
+eval e (Pi nm a b)     = VPi nm (eval e a) (eval e b)
 -- eval e (Lam x t)    = Ter (Lam x t) e -- stop at lambdas
-eval e (Lam x t)       = VLam $ \x' -> eval (Pair e (x,x')) t
+eval e (Lam x t)       = VLam (fst x) $ \x' -> eval (Pair e (x,x')) t
 eval e (RecordT bs)      = VRecordT $ evalTele e bs
 eval e (Record fs)     = VRecord [(l,eval e x) | (l,x) <- fs]
 eval e (Proj l a)        = projVal l (eval e a)
 eval e (Where t decls) = eval (PDef [ (x,y) | (x,_,y) <- decls ] e) t
-eval e (Con name ts)   = VCon name (map (eval e) ts)
+eval e (Con name ts)   = VCon name (eval e ts)
 eval e (Split pr alts) = Ter (Split pr alts) e
 eval e (Sum pr ntss)   = Ter (Sum pr ntss) e
 eval _ (Undef _)       = error "undefined (2)"
@@ -45,26 +46,25 @@ eval e (Join t u)      = vJoin (eval e t) (eval e u)
 abstract :: String -> [Val] -> Val
 abstract x = foldl app (VAbstract x)
 
-binOp :: forall a a1.
-               (Typeable a1, Typeable a, Show a1) =>
-               (Double -> a -> a1) -> String -> Val
-binOp op opName = VLam $ \vx -> VLam $ \vy -> case (vx,vy) of
-  (VPrim (fromDynamic -> Just (x::Double)) _, VPrim (fromDynamic -> Just y) _) ->
+binOp :: (Typeable a, Typeable b, Typeable c, Show c) =>
+         (a -> b -> c) -> String -> Val
+binOp op opName = VLam "x" $ \vx -> VLam "y" $ \vy -> case (vx,vy) of
+  (VPrim (fromDynamic -> Just x) _, VPrim (fromDynamic -> Just y) _) ->
       let z = op x y
       in VPrim (toDyn z) (show z)
   _ -> abstract opName [vx,vy]
 
 lkPrim :: String -> Val
-lkPrim "-" = binOp (-) "-"
-lkPrim "+" = binOp (+) "+"
-lkPrim "*" = binOp (+) "*"
-lkPrim "positive?" = VLam $ \xi ->
-                        VLam $ \ty ->
-                        VLam $ \true ->
-                        VLam $ \false -> case xi of
+lkPrim "-" = binOp ((-) :: Double -> Double -> Double) "-"
+lkPrim "+" = binOp ((+) :: Double -> Double -> Double) "+"
+lkPrim "*" = binOp ((*) :: Double -> Double -> Double) "*"
+lkPrim "positive?" = VLam "x" $ \xi ->
+                     VLam "type" $ \ty ->
+                     VLam "true" $ \true ->
+                     VLam "false" $ \false -> case xi of
   VPrim (fromDynamic -> Just (x::Double)) _ -> if x >= 0
                                                then true `app` (abstract "positive!" [xi])
-                                               else false `app` VLam (\q -> -- the type system prevents getting here.
+                                               else false `app` VLam "neg" (\q -> -- the type system prevents getting here.
                                                              abstract "impossible" [q,(abstract "negative!" [xi])])
   _ -> abstract "positive?" [xi,ty,true,false]
 lkPrim p = abstract p []
@@ -73,25 +73,25 @@ real :: Val
 real = VAbstract "R"
 
 positive :: Val -> Val
-positive v = abstract ">0" [v]
+positive v = abstract ">=0" [v]
 
 bot :: Val
-bot = Ter (Sum ("Bot",Loc "Props" (4,6)) []) Empty
+bot = Ter (Sum (Loc "Props" (0,0)) []) Empty
 
 infixr -->
 (-->) :: Val -> Val -> Val
-a --> b = pi a $ \_ -> b
-pi :: Val -> (Val -> Val) -> Val
-pi a f = VPi a $ VLam f
+a --> b = pi "_" a $ \_ -> b
+pi :: String -> Val -> (Val -> Val) -> Val
+pi nm a f = VPi nm a $ VLam nm f
 lkPrimTy :: String -> Val
 lkPrimTy "-" = real --> real --> real
 lkPrimTy "+" = real --> real --> real
 lkPrimTy "*" = real --> real --> real
-lkPrimTy "positive?" = pi real $ \x ->
-                       pi VU   $ \ty ->
+lkPrimTy "positive?" = pi "x" real $ \x ->
+                       pi "type" VU   $ \ty ->
                        (positive x --> ty) --> ((positive x --> bot) --> ty) --> ty
 lkPrimTy "#R" = VU
-lkPrimTy "#>0" = real --> VU
+lkPrimTy "#>=0" = real --> VU
 lkPrimTy "#Ind" = VU
 lkPrimTy p = error ("No type for primitive: " ++ show p)
 
@@ -101,26 +101,36 @@ evalTele e (((x,l),t):ts) = VBind x t' (\x' -> evalTele (Pair e ((x,l),x')) ts)
   where t' = eval e t
 
 vJoin :: Val -> Val -> Val
-vJoin = VJoin
+-- vJoin (VPi nm a b) (VPi _ a' b') = VPi nm (vMeet a a') (vJoin b b') -- EQUALITY of codomain is needed
+vJoin (VRecordT fs) (VRecordT fs') | botTele x = VJoin (VRecordT fs) (VRecordT fs')
+                                   | otherwise = VRecordT x
+  where x = joinFields fs fs'
+vJoin x y = VJoin x y
 
 vMeet :: Val -> Val -> Val
 vMeet (VRecordT fs) (VRecordT fs') | botTele x = VMeet (VRecordT fs) (VRecordT fs')
                                    | otherwise = VRecordT x
   where x = meetFields fs fs'
-vMeet x y = VMeet x y
+-- vMeet (VPi nm a b) (VPi _ a' b') = VPi nm (vJoin a a') (vMeet b b') -- EQUALITY of codomain is needed
+vMeet x y = case conv 0 x y of
+              Nothing -> x
+              Just _ -> VMeet x y
 
 hasField :: String -> VTele -> Bool
 hasField _ VEmpty = False
 hasField l (VBind l' _ t) = l == l' || hasField l (t (error "hasField: cannot look at values!"))
+hasField _ VBot = error "VBot escaped from meet"
 
 lacksField :: String -> VTele -> Bool
 lacksField l fs = not (hasField l fs)
 
+-- | Is this a bottom telescope?
 botTele :: VTele -> Bool
 botTele VEmpty = False
 botTele VBot = True
 botTele  (VBind _ _ t) = botTele (t (error "botTele: cannot look at values!"))
 
+-- | the meet of two telescopes
 meetFields :: VTele -> VTele -> VTele
 meetFields VEmpty fs = fs
 meetFields fs VEmpty = fs
@@ -129,13 +139,30 @@ meetFields fs@(VBind l a t) fs'@(VBind l' a' t')
   | lacksField l' fs  = VBind l' a' (\x -> meetFields fs (t' x))
   | lacksField l  fs' = VBind l  a  (\x -> meetFields fs' (t x))
   | otherwise = VBot
+meetFields VBot _ = VBot
+meetFields _ VBot = VBot
 
+
+-- | the join of two telescopes
+joinFields :: VTele -> VTele -> VTele
+joinFields VEmpty _ = VEmpty
+joinFields _ VEmpty = VEmpty
+joinFields fs@(VBind l a t) fs'@(VBind l' a' t')
+  | "__REMOVE__" `occursIn` a = joinFields (t remove) fs'
+  | "__REMOVE__" `occursIn` a' = joinFields fs (t' remove)
+  | l == l' = VBind l (vJoin a a') (\x -> joinFields (t x) (t' x))
+  | lacksField l' fs  = joinFields fs (t' remove)
+  | lacksField l  fs' = joinFields fs' (t remove)
+  | otherwise = VBot
+ where remove = VVar "__REMOVE__"
+joinFields VBot _ = VBot
+joinFields _ VBot = VBot
 
 app :: Val -> Val -> Val
-app (VLam f) u = f u
+app (VLam _ f) u = f u
 -- app (Ter (Lam cs x t) e) u = eval (Pair e (x,u)) t
-app (Ter (Split _ nvs) e) (VCon name us) = case lookup name nvs of
-    Just (xs,t) -> eval (upds e (zip xs us)) t
+app (Ter (Split _ nvs) e) (VCon name u) = case lookup name nvs of
+    Just (x,t) -> eval (Pair e (x,u)) t
     Nothing -> error $ "app: Split with insufficient arguments; " ++
                         "missing case for " ++ name
 app u@(Ter (Split _ _) _) v | isNeutral v = VSplit u v -- v should be neutral
@@ -171,13 +198,13 @@ noSub a b = Just $ sep [pretty a,"not a subtype of",pretty b]
 -- | @conv k a b@ Checks that @a@ can be converted to @b@.
 conv :: Int -> Val -> Val -> Maybe D
 conv _ VU VU = Nothing
-conv k (VLam f) (VLam g) = do
+conv k (VLam _ f) (VLam _ g) = do
   let v = mkVar k
   conv (k+1) (f v) (g v)
-conv k (VLam f) g = do
+conv k (VLam _ f) g = do
   let v = mkVar k
   conv (k+1) (f v) (app g v)
-conv k f (VLam g) = do
+conv k f (VLam _ g) = do
   let v = mkVar k
   conv (k+1) (app f v) (g v)
 conv k (Ter (Lam x u) e) (Ter (Lam x' u') e') = do
@@ -195,14 +222,14 @@ conv k (Ter (Sum p _) e)   (Ter (Sum p' _) e') =
   (p `equal` p') <> convEnv k e e'
 conv k (Ter (Undef p) e) (Ter (Undef p') e') =
   (p `equal` p') <> convEnv k e e'
-conv k (VPi u v) (VPi u' v') = do
+conv k (VPi _ u v) (VPi _ u' v') = do
   let w = mkVar k
   conv k u' u  <> conv (k+1) (app v w) (app v' w)
 conv k (VRecordT fs) (VRecordT fs') = 
   convTele k fs fs'
 conv k (VProj l u) (VProj l' u') = equal l l' <> conv k u u'
 conv k (VCon c us) (VCon c' us') =
-  (c `equal` c') <> mconcat (zipWith (conv k) us us')
+  (c `equal` c') <> (conv k us us')
 conv k (VRecord fs) (VRecord fs') = convFields k fs fs'
 conv k (VApp u v)   (VApp u' v')   = conv k u u' <> conv k v v'
 conv k (VSplit u v) (VSplit u' v') = conv k u u' <> conv k v v'
@@ -214,7 +241,7 @@ conv _ x              x'           = different x x'
 -- @sub _ a b@: check that a is a subtype of b.
 sub :: Int -> Val -> Val -> Maybe D
 sub _ VU VU = Nothing
-sub k (VPi u v) (VPi u' v') = do
+sub k (VPi _ u v) (VPi _ u' v') = do
   let w = mkVar k
   conv k u' u  <> sub (k+1) (app v w) (app v' w)
 sub k (VRecordT fs) (VRecordT fs') = subTele k fs fs'
@@ -266,29 +293,26 @@ showVal ctx t0 = case t0 of
   (VJoin u v)  -> pp 2 (\p -> p u <+> "\\/" <+> p v)
   (VMeet u v)  -> pp 3 (\p -> p u <+> "/\\" <+> p v)
   (Ter t env)  -> showTer ctx env t
-  (VCon c us)  -> prn 4 (pretty c <+> showArgs us)
-  (VPi a f)    -> pp 1 $ \p ->
-    do s <- getSupply      -- "Pi" <+> svs [a,f]
-       let b = app f (VVar s)
-           depends = s `elem` unknowns b
-       ((if depends
-         then parens (pretty s <> ":" <> pretty a)
-         else showVal 2 a)
-         <+> "->") </> p b
+  (VCon c us)  -> prn 4 ("`" <> pretty c <+> showVal 5 us)
+  (VPi nm a f) -> pp 1 $ \p ->
+     if dependent f then withVar nm $ \v -> (parens (pretty v <> ":" <> pretty a) <+> "->") </> p (f `app` (VVar v))
+     else (showVal 2 a  <+> "->") </> p (f `app` (VVar "_"))
   (VApp u v)   -> pp 4 (\p -> hang 2 (p u) (showVal 5 v))
   (VSplit (Ter (Split _ branches) env) v) -> hang 2 ("case" <+> pretty v <+> "of") (showSplitBranches env branches)
   (VVar x)     -> pretty x
   (VRecordT tele) -> pretty tele
   (VRecord fs)   -> tupled [pretty l <+> "=" <+> pretty e | (l,e) <- fs]
   (VProj f u)     -> pp 5 (\p -> p u <> "." <> pretty f)
-  (VLam f)  -> pp 1 $ \p -> do
-    s <- getSupply
-    hang 0 ("\\" <> pretty s <+> "->") (p (f $ VVar s))
+  (VLam nm f)  -> pp 1 $ \p -> withVar nm $ \v ->
+    hang 0 ("\\" <> pretty v <+> "->") (p (f $ VVar v))
   (VPrim _ nm) -> pretty nm
   (VAbstract nm) -> pretty ('#':nm)
  where pp :: Int -> ((Val -> D) -> D) -> D
        pp opPrec k = prn opPrec (k (showVal opPrec))
        prn opPrec = (if opPrec < ctx then parens else id)
+
+x `occursIn` a = x `elem` unknowns a
+dependent f =  "__DEPENDS?__" `occursIn` (f `app` VVar "__DEPENDS?__")
 
 showArgs :: [Val] -> D
 showArgs = sep . map (showVal 5)
@@ -315,7 +339,6 @@ instance Pretty VTele where
   pretty = encloseSep "[" "]" ";" . prettyTele
 
 instance Pretty Env where
-  -- pretty e = brackets (sep (reverse (showEnv e)))
   pretty e = encloseSep "[" "]" ";" $ reverse (showEnv e)
 
 showEnv :: Env -> [D]
@@ -337,18 +360,18 @@ showTer ctx ρ t0 = case t0 of
    (Meet e0 e1)  -> pp 2 $ \p -> p e0 <+> "/\\" <+> p e1
    (Join e0 e1)  -> pp 2 $ \p -> p e0 <+> "\\/" <+> p e1
    (App e0 e1)   -> pp 4 $ \p -> p e0 <+> showTer 5 ρ e1
-   (Pi a (Lam ("_",_) t)) -> pp 1 $ \p -> (showTer 2 ρ a <+> "->") </> p t
-   (Pi a (Lam x t)) -> pp 1 $ \p -> (parens (pretty x <> ":" <> showTer 0 ρ a) <+> "->") </> p t
-   (Pi e0 e1)    -> "Pi" <+> showTersArgs ρ [e0,e1]
+   (Pi _ a (Lam ("_",_) t)) -> pp 1 $ \p -> (showTer 2 ρ a <+> "->") </> p t
+   (Pi _ a (Lam x t)) -> pp 1 $ \p -> (parens (pretty x <> ":" <> showTer 0 ρ a) <+> "->") </> p t
+   (Pi _ e0 e1)    -> "Pi" <+> showTersArgs ρ [e0,e1]
    (Lam (x,_) e) -> pp 2 (\p -> hang 0 ("\\" <> pretty x <+> "->") (p e))
    (Proj l e)    -> pp 5 (\p -> p e <> "." <> pretty l)
    (RecordT ts)  -> encloseSep "[" "]" ";" (showTele ρ ts)
    (Record fs)   -> encloseSep "(" ")" "," [pretty l <> " = " <> showTer 0 ρ e | (l,e) <- fs]
    (Where e d)   -> pp 0 (\p -> p e <+> "where" <+> showDecls ρ d)
    (Var x)       -> prettyLook x ρ
-   (Con c es)    -> pretty c <+> showTersArgs ρ es
+   (Con c es)    -> "`" <> pretty c <+> showTer 5 ρ es
    (Split _l branches)   -> hang 2 "split"  $ showSplitBranches ρ branches
-   (Sum (_name,_) branches) -> encloseSep "{" "}" "| " (map (showBranch ρ) branches)
+   (Sum _l branches) -> encloseSep "{" "}" "| " (map (showBranch ρ) branches)
    (Undef _)     -> "undefined (1)"
    (Real r)      -> showy r
    (Prim n)      -> showy n
@@ -356,12 +379,12 @@ showTer ctx ρ t0 = case t0 of
        pp opPrec k = prn opPrec (k (showTer opPrec ρ))
        prn opPrec = (if opPrec < ctx then parens else id)
 
-
 showSplitBranches ρ branches = encloseSep "{" "}" ";"
-  [hang 2 (pretty l <+> sep (map (pretty . fst) bnds) <+> "↦") (showTer 0 ρ t)  | (l,(bnds,t)) <- branches]
-  
-showBranch :: Env -> (Binder, Tele) -> D
-showBranch env ((b,_),tele) = pretty b <+> sep (map parens (showTele env tele))
+  [hang 2 (pretty l <+> ((pretty . fst) bnds) <+> "↦") (showTer 0 ρ t)  | (l,(bnds,t)) <- branches]
+
+showBranch :: Env -> (Binder, Ter) -> D
+showBranch env ((b,_),arg) = pretty b <+> (showTer 0 env arg)
+
 instance Pretty Loc where
   pretty (Loc x l) = pretty x <> "@" <> pretty l
 
@@ -375,19 +398,19 @@ showDecls :: Env -> Decls -> D
 showDecls ρ defs = vcat (map (showDecl ρ) defs)
 
 class Value v where
-  unknowns :: v -> [String]
+  unknowns :: v -> [String] -- aka "free variables"
 
 instance Value Val where
   unknowns v0 = case v0 of
     VU -> []
-    VPi x y -> unknowns x ++ unknowns y
+    VPi _ x y -> unknowns x ++ unknowns y
     VRecordT x -> unknowns x
     VRecord x -> concatMap (unknowns . snd) x
-    VCon _ x -> concatMap unknowns x
+    VCon _ x -> unknowns x
     VApp x y -> unknowns x ++ unknowns y
     VSplit x y -> unknowns x ++ unknowns y
     VProj _ x -> unknowns x
-    VLam f -> unknowns (f (VVar "___UNK___"))
+    VLam _ f -> unknowns (f (VVar "___UNK___"))
     VPrim{} -> []
     VAbstract{} -> []
     VMeet x y -> unknowns x ++ unknowns y

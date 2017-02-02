@@ -1,14 +1,13 @@
-module Props where
+module where
 
-Bot : Type  -- do not move this type (at all!) otherwise it won't be found by primops.
-data Bot =
+Bot : Type  -- do not move this type otherwise it won't be found by primops.
+Bot = { }
 
 Top : Type
-data Top = top
+Top = [ ]
 
 Dec : Type -> Type
-data Dec T = yes (p : T)
-           | no (q : T -> Bot)
+Dec T = {yes T | no (T -> Bot)}
 
 Decidable : (T : Type) -> (P : T -> Type) -> Type
 Decidable T P = (x : T) -> Dec (P x)
@@ -26,9 +25,8 @@ decToClass T =
       no  q -> (sitType = T -> Bot, sit = q)
 
 
-decTop : Dec Top
-decTop = yes top
-
 decBot : Dec Bot
-decBot = no (\p -> p)
+decBot = 'no (\p -> p)
 
+decTop : Dec Top
+decTop = 'yes ()

@@ -7,7 +7,7 @@ layout "where", "let", "split", "mutual" ;
 layout stop "in" ;
 -- Do not use layout toplevel as it makes pExp fail!
 
-Module.   Module ::= "module" AIdent "where" "{" [Imp] [Decl] "}" ;
+Module.   Module ::= "module" "where" "{" [Imp] [Decl] "}" ;
 
 Import.   Imp ::= "import" AIdent ;
 separator Imp ";" ;
@@ -17,7 +17,6 @@ separator Fld ",";
 
 DeclDef.    Decl ::= AIdent [AIdent] "=" ExpWhere ;
 DeclType.   Decl ::= AIdent ":" Exp ;
-DeclData.   Decl ::= "data" AIdent [AIdent] "=" [Label] ;
 DeclMutual. Decl ::= "mutual" "{" [Decl] "}" ;
 separator   Decl ";" ;
 
@@ -32,8 +31,10 @@ Or.       Exp2 ::= Exp2 "\\/" Exp2;
 And.      Exp3 ::= Exp3 "/\\" Exp3;
 App.      Exp4 ::= Exp4 Exp5 ;
 Proj.     Exp5 ::= Exp5 "." AIdent ;
+Con.      Exp6 ::= "'" AIdent Exp6;
 Tuple.    Exp6 ::= "(" [Fld] ")" ;
 Record.   Exp6 ::= "[" [PseudoTDecl] "]"  ;
+Sum.      Exp6 ::= "{" [Label] "}";
 Var.      Exp6 ::= AIdent ;
 U.        Exp6 ::= "Type" ;
 Real.     Exp6 ::= Double ;
@@ -44,11 +45,11 @@ coercions Exp 6 ;
 separator Exp "," ;
 
 -- Branches
-Branch.   Branch ::= AIdent [AIdent] "->" ExpWhere ;
+Branch.   Branch ::= AIdent AIdent "->" ExpWhere ;
 separator Branch ";" ;
 
 -- Labelled sum alternatives
-Label.    Label   ::= AIdent [VTDecl] ;
+Label.    Label   ::= AIdent Exp ;
 separator Label "|" ;
 
 
@@ -60,8 +61,8 @@ terminator VTDecl "" ;
 -- in the grammar when parsing Pi
 PseudoTDecl. PseudoTDecl ::=  Exp ":" Exp ;
 
-separator nonempty PseudoTDecl ";" ;
+separator PseudoTDecl ";" ;
 
-position token AIdent ((letter|'\''|'_'|'`')(letter|digit|'\''|'_')*) ;
+position token AIdent ((letter|'_'|'`')(letter|digit|'\''|'_')*) ;
 terminator AIdent "" ;
 
