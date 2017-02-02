@@ -19,3 +19,5 @@ joinA : (A B : Type) -> A -> A \/ B
 joinA A B p = p
 
 
+r1 : (A B : Type) -> A -> B -> [fst : A] /\ [snd : B]
+r1 _ _ x y = (fst = x, snd = y)

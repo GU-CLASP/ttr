@@ -276,7 +276,7 @@ showVal ctx t0 = case t0 of
          else showVal 2 a)
          <+> "->") </> p b
   (VApp u v)   -> pp 4 (\p -> hang 2 (p u) (showVal 5 v))
-  (VSplit u v) -> pretty u <+> showVal 5 v
+  (VSplit (Ter (Split _ branches) env) v) -> hang 2 ("case" <+> pretty v <+> "of") (showSplitBranches env branches)
   (VVar x)     -> pretty x
   (VRecordT tele) -> pretty tele
   (VRecord fs)   -> tupled [pretty l <+> "=" <+> pretty e | (l,e) <- fs]

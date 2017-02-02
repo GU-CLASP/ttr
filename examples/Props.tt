@@ -13,14 +13,22 @@ data Dec T = yes (p : T)
 Decidable : (T : Type) -> (P : T -> Type) -> Type
 Decidable T P = (x : T) -> Dec (P x)
 
-Class : Type
-Class = [ P : Type ; q : P ]
+Austinian : Type
+Austinian = [ sitType : Type ; sit : sitType ]
 
 Classifiable : Type -> Type
-Classifiable S = (s : S) -> Class
+Classifiable S = (s : S) -> Austinian
 
-decToClass : (T : Type) -> Dec T -> Class
+decToClass : (T : Type) -> Dec T -> Austinian
 decToClass T =
    split
-      yes p -> (P = T, q = p)
-      no  q -> (P = T -> Bot, q = q)
+      yes p -> (sitType = T,        sit = p)
+      no  q -> (sitType = T -> Bot, sit = q)
+
+
+decTop : Dec Top
+decTop = yes top
+
+decBot : Dec Bot
+decBot = no (\p -> p)
+

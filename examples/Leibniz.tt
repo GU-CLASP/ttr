@@ -1,9 +1,9 @@
 module Leibniz where
 
-Eq : (A : U) -> (x y : A) -> U
-Eq A x y = (P : A -> U) -> P x -> P y
+Eq : (A : Type) -> (x y : A) -> Type
+Eq A x y = (P : A -> Type) -> P x -> P y
 
-refl : (A : U) -> (x : A) -> Eq A x x
+refl : (A : Type) -> (x : A) -> Eq A x x
 refl A x P p = p
 
 
