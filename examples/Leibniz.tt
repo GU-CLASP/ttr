@@ -1,4 +1,4 @@
-module Leibniz where
+module where
 
 Eq : (A : Type) -> (x y : A) -> Type
 Eq A x y = (P : A -> Type) -> P x -> P y

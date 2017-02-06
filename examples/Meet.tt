@@ -1,4 +1,4 @@
-module Meet where
+module where
 
 
 meetA : (A B : Type) -> (A /\ B) -> A
@@ -8,7 +8,7 @@ meetAB : (A B : Type) -> (A /\ B) -> [fst : A; snd : B]
 meetAB A B p = (fst = p, snd = p)
 
 Plus : Type -> Type -> Type
-data Plus A B = Inl (x : A) | Inr (y : B)
+Plus A B = {Inl A | Inr B}
 
 joinAB : (A B : Type) -> Plus A B -> (A \/ B)
 joinAB A B = split
