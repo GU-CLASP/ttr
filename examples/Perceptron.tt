@@ -1,6 +1,7 @@
 module where
 
 import Lists
+import Props
 import Reals
 
 Ind : Type

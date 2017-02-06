@@ -19,7 +19,7 @@ look x (Pair rho (n@(y,_l),u))
 look x r@(PDef es r1) = case lookupIdent x es of
   Just (y,t)  -> (y,eval r t)
   Nothing     -> look x r1
-look _ Empty = error "panic: variable not found in env"
+look x Empty = error ("panic: variable not found in env:" ++ show x)
 
 
 eval :: Env -> Ter -> Val
@@ -97,7 +97,7 @@ lkPrimTy p = error ("No type for primitive: " ++ show p)
 
 evalTele :: Env -> Tele -> VTele
 evalTele _ [] = VEmpty
-evalTele e (((x,l),t):ts) = VBind x t' (\x' -> evalTele (Pair e ((x,l),x')) ts)
+evalTele e (((x,l),t):ts) = VBind (x,l) t' (\x' -> evalTele (Pair e ((x,l),x')) ts)
   where t' = eval e t
 
 vJoin :: Val -> Val -> Val
@@ -118,7 +118,7 @@ vMeet x y = case conv 0 x y of
 
 hasField :: String -> VTele -> Bool
 hasField _ VEmpty = False
-hasField l (VBind l' _ t) = l == l' || hasField l (t (error "hasField: cannot look at values!"))
+hasField l (VBind (l',_) _ t) = l == l' || hasField l (t (error "hasField: cannot look at values!"))
 hasField _ VBot = error "VBot escaped from meet"
 
 lacksField :: String -> VTele -> Bool
@@ -134,10 +134,10 @@ botTele  (VBind _ _ t) = botTele (t (error "botTele: cannot look at values!"))
 meetFields :: VTele -> VTele -> VTele
 meetFields VEmpty fs = fs
 meetFields fs VEmpty = fs
-meetFields fs@(VBind l a t) fs'@(VBind l' a' t')
-  | l == l' = VBind l (vMeet a a') (\x -> meetFields (t x) (t' x))
-  | lacksField l' fs  = VBind l' a' (\x -> meetFields fs (t' x))
-  | lacksField l  fs' = VBind l  a  (\x -> meetFields fs' (t x))
+meetFields fs@(VBind (l,ll) a t) fs'@(VBind (l',ll') a' t')
+  | l == l' = VBind (l,ll) (vMeet a a') (\x -> meetFields (t x) (t' x))
+  | lacksField l' fs  = VBind (l,ll') a' (\x -> meetFields fs (t' x))
+  | lacksField l  fs' = VBind (l,ll)  a  (\x -> meetFields fs' (t x))
   | otherwise = VBot
 meetFields VBot _ = VBot
 meetFields _ VBot = VBot
@@ -147,10 +147,10 @@ meetFields _ VBot = VBot
 joinFields :: VTele -> VTele -> VTele
 joinFields VEmpty _ = VEmpty
 joinFields _ VEmpty = VEmpty
-joinFields fs@(VBind l a t) fs'@(VBind l' a' t')
+joinFields fs@(VBind (l,ll) a t) fs'@(VBind (l',ll') a' t')
   | "__REMOVE__" `occursIn` a = joinFields (t remove) fs'
   | "__REMOVE__" `occursIn` a' = joinFields fs (t' remove)
-  | l == l' = VBind l (vJoin a a') (\x -> joinFields (t x) (t' x))
+  | l == l' = VBind (l,ll) (vJoin a a') (\x -> joinFields (t x) (t' x))
   | lacksField l' fs  = joinFields fs (t' remove)
   | lacksField l  fs' = joinFields fs' (t remove)
   | otherwise = VBot
@@ -333,7 +333,7 @@ prettyLook x Empty = pretty x {- typically bound in a Split -}
 
 prettyTele :: VTele -> [D]
 prettyTele VEmpty = []
-prettyTele (VBind nm ty rest) = (pretty nm <+> ":" <+> pretty ty) : prettyTele (rest $ VVar nm)
+prettyTele (VBind (nm,_l) ty rest) = (pretty nm <+> ":" <+> pretty ty) : prettyTele (rest $ VVar nm)
 
 instance Pretty VTele where
   pretty = encloseSep "[" "]" ";" . prettyTele

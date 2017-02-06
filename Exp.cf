@@ -17,13 +17,14 @@ separator Fld ",";
 
 DeclDef.    Decl ::= AIdent [AIdent] "=" ExpWhere ;
 DeclType.   Decl ::= AIdent ":" Exp ;
+DeclOpen.   Decl ::= "open" Exp ;
 DeclMutual. Decl ::= "mutual" "{" [Decl] "}" ;
 separator   Decl ";" ;
 
 Where.    ExpWhere ::= Exp "where" "{" [Decl] "}" ;
 NoWhere.  ExpWhere ::= Exp ;
 
-Let.      Exp  ::= "let" "{" [Decl] "}" "in" Exp ;
+Let.      Exp  ::= "let"  "{" [Decl] "}" "in" Exp ;
 Lam.      Exp1  ::= "\\" AIdent [AIdent] "->" Exp1 ;
 Fun.      Exp1 ::= Exp2 "->" Exp1 ;
 Pi.       Exp1 ::= "(" PseudoTDecl ")" "->" Exp1 ;

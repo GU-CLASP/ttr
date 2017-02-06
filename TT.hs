@@ -82,7 +82,7 @@ mkWheres (d:ds) e = Where (mkWheres ds e) d
 --------------------------------------------------------------------------------
 -- | Values
 
-data VTele = VEmpty | VBind Ident Val (Val -> VTele)
+data VTele = VEmpty | VBind Binder Val (Val -> VTele)
            | VBot -- Hack!
 
 data Val = VU

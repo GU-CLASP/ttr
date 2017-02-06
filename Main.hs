@@ -68,7 +68,7 @@ main = do
       | otherwise -> case files of
        []  -> do
          putStrLn welcome
-         runInputT (settings []) (loop flags [] [] TC.verboseEnv)
+         runInputT (settings []) (loop flags [] TC.verboseEnv)
        [f] -> do
          putStrLn welcome
          putStrLn $ "Loading " ++ show f
@@ -86,43 +86,43 @@ initLoop flags f = do
   case res of
     TC.Failed err -> do
       putStrLn $ render $ sep ["Loading failed: ",err]
-      runInputT (settings []) (loop flags f [] TC.verboseEnv)
-    TC.Loaded (adefs,names) tenv -> do
+      runInputT (settings []) (loop flags f TC.verboseEnv)
+    TC.Loaded adecls tenv -> do
       putStrLn "File loaded."
       -- Compute names for auto completion
-      runInputT (settings [n | (n,_) <- names]) (loop flags f names tenv)
+      runInputT (settings [n | adefs <- adecls, ((n,_loc),_,_) <- adefs]) (loop flags f tenv)
 
 -- The main loop
-loop :: [Flag] -> FilePath -> [(C.Binder)] -> TC.TEnv -> Interpreter ()
-loop flags f names tenv@(TC.TEnv _ rho _ _ _) = do
+loop :: [Flag] -> FilePath -> TC.TEnv -> Interpreter ()
+loop flags f tenv@(TC.TEnv _ rho _ _ _) = do
   input <- getInputLine prompt
   case input of
-    Nothing    -> outputStrLn help >> loop flags f names tenv
+    Nothing    -> outputStrLn help >> loop flags f tenv
     Just ":q"  -> return ()
     Just ":r"  -> lift $ initLoop flags f
     Just (':':'l':' ':str)
       | ' ' `elem` str -> do outputStrLn "Only one file allowed after :l"
-                             loop flags f names tenv
+                             loop flags f tenv
       | otherwise      -> lift $ initLoop flags str
     Just (':':'c':'d':' ':str) -> do lift (setCurrentDirectory str)
-                                     loop flags f names tenv
-    Just ":h"  -> outputStrLn help >> loop flags f names tenv
+                                     loop flags f tenv
+    Just ":h"  -> outputStrLn help >> loop flags f tenv
     Just str   -> case pExp (lexer str) of
-      Bad err -> outputStrLn ("Parse error: " ++ err) >> loop flags f names tenv
+      Bad err -> outputStrLn ("Parse error: " ++ err) >> loop flags f tenv
       Ok  exp ->
-        case runResolver [] {- FIXME -} "<interactive>" $ local (insertBinders names) $ resolveExp exp of
+        case runResolver [] {- FIXME -} "<interactive>" $ resolveExp exp of
           Left  err  -> do outputStrLn (render ("Resolver failed:" </> err))
-                           loop flags f names tenv
+                           loop flags f tenv
           Right body -> do
           x <- liftIO $ TC.runInfer tenv body
           case x of
             Left err -> do outputStrLn (render ("Could not type-check:" </> err))
-                           loop flags f names tenv
+                           loop flags f tenv
             Right typ  -> do
               outputStrLn (render ("TYPE:" </> pretty typ))
               let e = E.eval rho body
               liftIO $ putStrLn (render ("EVAL:" </> pretty e))
-              loop flags f names tenv
+              loop flags f tenv
 
 load :: String -> FilePath -> StateT TC.Modules IO TC.ModuleState
 load prefix f = do
@@ -147,12 +147,12 @@ load prefix f = do
                 ms' <- get
                 case runResolver ms' f (resolveModule m) of
                   Left err -> return $ TC.Failed $ sep ["Resolver error:", err]
-                  Right (decls,names) -> do
+                  Right (decls) -> do
                     (merr,tenv) <- liftIO $ TC.checkModule ms' TC.verboseEnv imps decls
                     case merr of
                       Just d -> liftIO $ putStrLn $ render $ sep ["Type-checking failed: ",d]
                       _ -> return ()
-                    let res = (TC.Loaded (decls,names) tenv)
+                    let res = (TC.Loaded decls tenv)
                     modify ((f,res):)
                     return res
 

@@ -11,15 +11,13 @@ import Control.Monad.Trans.Except
 import Control.Monad.Trans.Reader
 import Control.Monad.Except
 import Pretty
-import Exp.Abs (Imp(..))
 
 import TT
 import Eval
 
-import Pretty
 
 data ModuleState
-  = Loaded {resolvedDecls :: ([Decls],[Binder])
+  = Loaded {resolvedDecls :: [Decls]
            ,checkedEnv :: TEnv}
   | Loading
   | Failed D
@@ -45,8 +43,6 @@ showCtxt ctx = intercalate ", \n" $ reverse $ [i ++ " : " ++ show v | ((i,_),v) 
 logg :: D -> Typing a -> Typing a
 logg x = local (\e -> e {errCtx = x:errCtx e})
 
--- instance Error D where
-  
 oops :: D -> Typing a
 oops msg = do
   TEnv {..} <- ask
@@ -63,23 +59,22 @@ addTypeVal :: (Binder, Val) -> TEnv -> TEnv
 addTypeVal p@(x,_) (TEnv k rho gam ex v) =
   TEnv (k+1) (Pair rho (x,mkVar k)) (p:gam) ex v
 
-addType :: (Binder,Ter) -> TEnv -> Typing TEnv
-addType (x,a) tenv@(TEnv _ rho _ _ _) = return $ addTypeVal (x,eval rho a) tenv
+addTeleVal :: VTele -> TEnv -> TEnv
+addTeleVal VEmpty lenv = lenv
+addTeleVal (VBind x a rest) lenv = addTypeVal (x,a) (addTeleVal (rest (mkVar (index lenv))) lenv) 
 
 addC :: Ctxt -> (Tele,Env) -> [(Binder,Val)] -> Ctxt
 addC gam _             []          = gam
 addC gam ((y,a):as,nu) ((x,u):xus) = 
   addC ((x,eval nu a):gam) (as,Pair nu (y,u)) xus
 
+-- | Add a bunch of (already checked) declarations to the environment.
 addDecls :: Decls -> TEnv -> TEnv
 addDecls d (TEnv k rho gam ex v) = do
   let rho1 = PDef [ (x,y) | (x,_,y) <- d ] rho
-      es' = evals rho1 (declDefs d)
+      es' = evals rho1 (declDefs d) -- FIXME: when adding modules we may not have the right environment here.
   let gam' = addC gam (declTele d,rho) es'
   TEnv k rho1 gam' ex v
-
-addTele :: Tele -> TEnv -> Typing TEnv
-addTele xas lenv = foldM (flip addType) lenv xas
 
 trace :: String -> Typing ()
 trace s = do
@@ -90,10 +85,10 @@ runTyping :: TEnv -> Typing a -> IO (Either D a)
 runTyping env t = runExceptT $ runReaderT t env
 
 checkModule :: Modules -> TEnv -> [String] -> [Decls] -> IO (Maybe D,TEnv)
-checkModule ms tenv [] dcls = runDeclss tenv dcls
+checkModule _ tenv [] dcls = runDeclss tenv dcls
 checkModule ms tenv (i:is) dcls = do
   case lookup i ms of
-    Just (Loaded (dss,_) _) -> do
+    Just (Loaded dss _) -> do
       checkModule ms ((foldl (flip addDecls) tenv dss)) is dcls
 
 runDecls :: TEnv -> Decls -> IO (Either D TEnv)
@@ -134,32 +129,37 @@ checkDecls :: Decls -> Typing ()
 checkDecls d = do
   let (idents, tele, ters) = (declIdents d, declTele d, declTers d)
   trace ("Checking: " ++ unwords idents)
-  checkTele tele
-  rho <- asks env
-  localM (addTele tele) $ checks (tele,rho) ters
+  vtele <- checkTeleEval tele
+  local (addTeleVal vtele) $ checks vtele ters
 
 checkTele :: Tele -> Typing ()
 checkTele []          = return ()
 checkTele ((x,a):xas) = do
-  _ <- inferType a
-  localM (addType (x,a)) $ checkTele xas
+  a' <- checkTypeEval a
+  local (addTypeVal (x,a')) $ checkTele xas
+
+checkTeleEval :: Tele -> Typing VTele
+checkTeleEval t = do
+  checkTele t
+  e <- asks env
+  return (evalTele e t)
 
 checkLogg :: Val -> Ter -> Typing ()
 checkLogg v t = logg (sep ["Checking that " <> pretty t, "has type " <> pretty v]) $ check v t
 
 check :: Val -> Ter -> Typing ()
 check a t = case (a,t) of
-  (_,Con c e) -> do
+  (_,Con c e) -> do -- FIXME: suspicious; we should expect a sum type here.
     (b,nu) <- getLblType c a
     check (eval nu b) e
-  (VU,Sum _ bs) -> sequence_ [inferType a | (_,a) <- bs]
+  (VU,Sum _ bs) -> sequence_ [checkType a | (_,a) <- bs]
   (VPi _ (Ter (Sum _ cas) nu) f,Split _ ces) -> do
     let cas' = sortBy (compare `on` fst . fst) cas
         ces' = sortBy (compare `on` fst) ces
     if map (fst . fst) cas' == map fst ces'
        then sequence_ [ check (VPi "" (eval nu typ) f) (Lam bndr term)
                       | ((_lbl1,(bndr,term)), ((_lbl2,_),typ)) <- zip ces' cas' ]
-       else oops "case branches does not match the data type"
+       else oops "case branches do not match the data type"
   (VPi _ a f,Lam x t)  -> do
     var <- getFresh
     local (addTypeVal (x,a)) $ check (app f var) t
@@ -181,7 +181,7 @@ check a t = case (a,t) of
 -- | Check that a record has a given type
 checkRecord :: VTele -> [(String,Ter)] -> Typing ()
 checkRecord VEmpty _ = return () -- other fields are ignored.
-checkRecord (VBind x a r) ts =
+checkRecord (VBind (x,_) a r) ts =
   case lookup x ts of
     Nothing -> oops $ sep ["type expects field", pretty x, "but it cannot be found in the term."]
     Just t -> do
@@ -191,12 +191,21 @@ checkRecord (VBind x a r) ts =
 checkEval :: Val -> Ter -> Typing Val
 checkEval a t = do
   checkLogg a t
-  eval' t
-
-eval' :: Ter -> Typing Val
-eval' t = do
   e <- asks env
   return $ eval e t
+
+checkTypeEval :: Ter -> Typing Val
+checkTypeEval t = do
+  checkType t
+  e <- asks env
+  return $ eval e t
+
+-- | Infer the type and evaluate the argument (return the type and then the value.)
+inferEval :: Ter -> Typing (Val,Val)
+inferEval t = do
+  a <- checkInfer t
+  e <- asks env
+  return (a,eval e t)
 
 checkSub :: D -> Val -> Val -> Typing ()
 checkSub msg a v = do
@@ -206,11 +215,11 @@ checkSub msg a v = do
       Just err -> do
         oops $ sep ["In" <+> msg, pretty v <> " is not a subtype of " <> pretty a, "because " <> err]
 
-inferType :: Ter -> Typing Val
-inferType t = do
+checkType :: Ter -> Typing ()
+checkType t = do
   a <- checkInfer t
   case a of
-   VU -> return a
+   VU -> return ()
    _ -> oops $ sep ["expected a type, but got", pretty t, "which as type",pretty a]
 
 
@@ -220,40 +229,39 @@ checkInfer e = case e of
   Real _ -> return real
   Prim p -> return $ lkPrimTy p
   Pi _ a (Lam x b) -> do
-    _ <- inferType a
-    localM (addType (x,a)) $ inferType b
+    a' <- checkTypeEval a
+    local (addTypeVal (x,a')) $ checkType b
+    return VU
   RecordT [] -> return VU
   RecordT ((x,a):as) -> do
-    _ <- inferType a
-    localM (addType (x,a)) $ inferType (RecordT as)
+    a' <- checkTypeEval a
+    local (addTypeVal (x,a')) $ checkType (RecordT as)
+    return VU
   U -> return VU                 -- U : U
   Var n -> do
     gam <- ctxt <$> ask
     case getIdent n gam of
       Just v  -> return v
-      Nothing -> oops $ pretty n <> " is not declared!"
+      Nothing -> oops $ pretty n <> " is not declared"
   App t u -> do
     c <- checkInfer t
     case c of
       VPi _ a f -> do
-        checkLogg a u
-        rho <- asks env
-        let v = eval rho u
+        v <- checkEval a u
         return $ app f v
       _       -> oops $ pretty c <> " is not a product"
   Proj l t -> do
-    a <- checkInfer t
-    t' <- eval' t
+    (a,t') <- inferEval t
     case a of
       VRecordT rt -> checkInferProj l t' rt
       _          -> oops $ pretty a <> " is not a record-type"
   Meet t u -> do
-    _ <- inferType t
-    _ <- inferType u
+    _ <- checkType t
+    _ <- checkType u
     return VU
   Join t u -> do
-    _ <- inferType t
-    _ <- inferType u
+    _ <- checkType t
+    _ <- checkType u
     return VU
   Where t d -> do
     checkDecls d
@@ -262,17 +270,14 @@ checkInfer e = case e of
 
 checkInferProj :: String -> {- ^ field to project-} Val -> {- ^ record value-} VTele -> {- ^ record type-} Typing Val
 checkInferProj l _ VEmpty = oops $ "field not found:" <> pretty l
-checkInferProj l r (VBind x a rest)
+checkInferProj l r (VBind (x,_) a rest)
   | x == l = return a
   | otherwise = checkInferProj l r (rest (projVal x r))
 checkInferProj _ _ VBot = error "checkInferProj: VBot escaped from meet"
 
-checks :: (Tele,Env) -> [Ter] -> Typing ()
+checks :: VTele -> [Ter] -> Typing ()
 checks _              []     = return ()
-checks ((x,a):xas,nu) (e:es) = do
-  let v = eval nu a
-  check v e
-  rho <- asks env
-  let v' = eval rho e
-  checks (xas,Pair nu (x,v')) es
+checks (VBind _ v xas) (e:es) = do
+  e' <- checkEval v e
+  checks (xas e') es
 checks _              _      = oops "checks"
