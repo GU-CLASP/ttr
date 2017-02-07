@@ -9,7 +9,7 @@ Ind = primitive "#Ind"
 
 kappa : [w : List Real;
          t : Real;
-         c : List Real -> Class]
+         c : List Real -> Austinian]
 kappa = (w = w, t = t, c = c)
   where w : List Real
         w = 'cons (head = 0.800, tail = 'cons (head = 0.010, tail = 'nil ()))
@@ -17,5 +17,5 @@ kappa = (w = w, t = t, c = c)
         t = 0.090
         f : (v : List Real) -> Dec (Positive (subtract t (dotProd w v)))
         f v = decidePositivity (subtract t (dotProd w v))
-        c : (v : List Real) -> Class
+        c : (v : List Real) -> Austinian
         c v = decToClass (Positive (subtract t (dotProd w v))) (f v)
