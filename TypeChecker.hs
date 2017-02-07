@@ -115,13 +115,6 @@ getLblType c (Ter (Sum _ cas) r) = case getIdent c cas of
 getLblType c u = oops (sep ["expected a data type for the constructor",
                               pretty c,"but got",pretty u])
 
--- Useful monadic versions of functions:
-localM :: (TEnv -> Typing TEnv) -> Typing a -> Typing a
-localM f r = do
-  e <- ask
-  a <- f e
-  local (const a) r
-
 getFresh :: Typing Val
 getFresh = mkVar <$> index <$> ask
 

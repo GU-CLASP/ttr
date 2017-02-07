@@ -117,9 +117,7 @@ vMeet x y = case conv 0 x y of
               Just _ -> VMeet x y
 
 hasField :: String -> VTele -> Bool
-hasField _ VEmpty = False
-hasField l (VBind (l',_) _ t) = l == l' || hasField l (t (error "hasField: cannot look at values!"))
-hasField _ VBot = error "VBot escaped from meet"
+hasField l fs = l `elem` (map fst (teleBinders fs))
 
 lacksField :: String -> VTele -> Bool
 lacksField l fs = not (hasField l fs)
@@ -147,7 +145,7 @@ meetFields _ VBot = VBot
 joinFields :: VTele -> VTele -> VTele
 joinFields VEmpty _ = VEmpty
 joinFields _ VEmpty = VEmpty
-joinFields fs@(VBind (l,ll) a t) fs'@(VBind (l',ll') a' t')
+joinFields fs@(VBind (l,ll) a t) fs'@(VBind (l',_ll') a' t')
   | "__REMOVE__" `occursIn` a = joinFields (t remove) fs'
   | "__REMOVE__" `occursIn` a' = joinFields fs (t' remove)
   | l == l' = VBind (l,ll) (vJoin a a') (\x -> joinFields (t x) (t' x))
@@ -367,10 +365,10 @@ showTer ctx ρ t0 = case t0 of
    (Proj l e)    -> pp 5 (\p -> p e <> "." <> pretty l)
    (RecordT ts)  -> encloseSep "[" "]" ";" (showTele ρ ts)
    (Record fs)   -> encloseSep "(" ")" "," [pretty l <> " = " <> showTer 0 ρ e | (l,e) <- fs]
-   (Where e d)   -> pp 0 (\p -> p e <+> "where" <+> showDecls ρ d)
+   (Where e d)   -> pp 0 (\p -> hang 2 (p e) (hang 2 "where" (showDecls ρ d)))
    (Var x)       -> prettyLook x ρ
    (Con c es)    -> "`" <> pretty c <+> showTer 5 ρ es
-   (Split _l branches)   -> hang 2 "split"  $ showSplitBranches ρ branches
+   (Split _l branches)   -> hang 2 "split" (showSplitBranches ρ branches)
    (Sum _l branches) -> encloseSep "{" "}" "| " (map (showBranch ρ) branches)
    (Undef _)     -> "undefined (1)"
    (Real r)      -> showy r
