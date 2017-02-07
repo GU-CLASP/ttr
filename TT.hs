@@ -85,6 +85,10 @@ mkWheres (d:ds) e = Where (mkWheres ds e) d
 data VTele = VEmpty | VBind Binder Val (Val -> VTele)
            | VBot -- Hack!
 
+teleBinders :: VTele -> [Binder]
+teleBinders (VBind x _ f) = x:teleBinders (f $ error "teleBinders: cannot look at values")
+teleBinders _ = []
+
 data Val = VU
          | Ter Ter Env
          | VPi String Val Val

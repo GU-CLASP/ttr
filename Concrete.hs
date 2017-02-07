@@ -64,13 +64,12 @@ data SymKind = Variable -- TODO: delete
   deriving (Eq,Show)
 
 -- local environment for constructors
-data Env = Env { envFile :: String,
-                 envModules :: Modules }
+data Env = Env { envFile :: String }
 
 type Resolver a = ReaderT Env (ExceptT D Identity) a
 
-runResolver :: Modules -> FilePath -> Resolver a -> Either D a
-runResolver ms f x = runIdentity $ runExceptT $ runReaderT x (Env f ms)
+runResolver :: FilePath -> Resolver a -> Either D a
+runResolver f x = runIdentity $ runExceptT $ runReaderT x (Env f)
 
 getModule :: Resolver String
 getModule = envFile <$> ask

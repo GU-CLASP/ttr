@@ -1,5 +1,5 @@
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE PatternSynonyms, FlexibleContexts, RecordWildCards, OverloadedStrings, TypeSynonymInstances #-}
+{-# LANGUAGE PatternSynonyms, FlexibleContexts, RecordWildCards, OverloadedStrings, TypeSynonymInstances, TupleSections#-}
 module TypeChecker where
 
 import Data.Function
@@ -10,15 +10,15 @@ import Control.Monad.Trans
 import Control.Monad.Trans.Except
 import Control.Monad.Trans.Reader
 import Control.Monad.Except
+import Data.String
 import Pretty
-
 import TT
 import Eval
 
+type CheckedDecls = ([Val],VTele)
 
 data ModuleState
-  = Loaded {resolvedDecls :: [Decls]
-           ,checkedEnv :: TEnv}
+  = Loaded {resolvedDecls :: [CheckedDecls]}
   | Loading
   | Failed D
 
@@ -63,18 +63,11 @@ addTeleVal :: VTele -> TEnv -> TEnv
 addTeleVal VEmpty lenv = lenv
 addTeleVal (VBind x a rest) lenv = addTypeVal (x,a) (addTeleVal (rest (mkVar (index lenv))) lenv) 
 
-addC :: Ctxt -> (Tele,Env) -> [(Binder,Val)] -> Ctxt
-addC gam _             []          = gam
-addC gam ((y,a):as,nu) ((x,u):xus) = 
-  addC ((x,eval nu a):gam) (as,Pair nu (y,u)) xus
-
 -- | Add a bunch of (already checked) declarations to the environment.
-addDecls :: Decls -> TEnv -> TEnv
-addDecls d (TEnv k rho gam ex v) = do
-  let rho1 = PDef [ (x,y) | (x,_,y) <- d ] rho
-      es' = evals rho1 (declDefs d) -- FIXME: when adding modules we may not have the right environment here.
-  let gam' = addC gam (declTele d,rho) es'
-  TEnv k rho1 gam' ex v
+addDecls :: CheckedDecls -> TEnv -> TEnv
+addDecls ([],VEmpty) tenv = tenv
+addDecls ((v:vs),VBind x a bs) (TEnv k rho gam ex verb) =
+  addDecls (vs,bs v) (TEnv k (Pair rho (x,v)) ((x,a):gam) ex verb)
 
 trace :: String -> Typing ()
 trace s = do
@@ -84,25 +77,16 @@ trace s = do
 runTyping :: TEnv -> Typing a -> IO (Either D a)
 runTyping env t = runExceptT $ runReaderT t env
 
-checkModule :: Modules -> TEnv -> [String] -> [Decls] -> IO (Maybe D,TEnv)
-checkModule _ tenv [] dcls = runDeclss tenv dcls
+checkModule :: Modules -> TEnv -> [String] -> [Decls] -> IO (Either D [CheckedDecls])
+checkModule _ tenv [] dcls = runDecls tenv dcls
 checkModule ms tenv (i:is) dcls = do
   case lookup i ms of
-    Just (Loaded dss _) -> do
-      checkModule ms ((foldl (flip addDecls) tenv dss)) is dcls
+    Nothing -> return $ Left $ sep ["unknow module:", fromString i]
+    Just (Loaded dss) -> do
+      checkModule ms (foldl (flip addDecls) tenv dss) is dcls
 
-runDecls :: TEnv -> Decls -> IO (Either D TEnv)
-runDecls tenv d = runTyping tenv $ do
-  checkDecls d
-  return (addDecls d tenv)
-
-runDeclss ::  TEnv -> [Decls] -> IO (Maybe D,TEnv)
-runDeclss tenv []         = return (Nothing, tenv)
-runDeclss tenv (d:ds) = do
-  x <- runDecls tenv d
-  case x of
-    Right tenv' -> runDeclss tenv' ds
-    Left s      -> return (Just s, tenv)
+runDecls :: TEnv -> [Decls] -> IO (Either D [CheckedDecls])
+runDecls tenv d = runTyping tenv $ checkDeclss d
 
 runInfer :: TEnv -> Ter -> IO (Either D Val)
 runInfer lenv e = runTyping lenv (checkInfer e)
@@ -118,12 +102,20 @@ getLblType c u = oops (sep ["expected a data type for the constructor",
 getFresh :: Typing Val
 getFresh = mkVar <$> index <$> ask
 
-checkDecls :: Decls -> Typing ()
+checkDecls :: Decls -> Typing CheckedDecls
 checkDecls d = do
   let (idents, tele, ters) = (declIdents d, declTele d, declTers d)
   trace ("Checking: " ++ unwords idents)
   vtele <- checkTeleEval tele
-  local (addTeleVal vtele) $ checks vtele ters
+  local (addTeleVal vtele) (checks vtele ters)
+  e <- asks env
+  return (map (eval (PDef (declDefs d) e)) (declTers d), vtele) -- allowing recursive definitions
+
+checkDeclss :: [Decls] -> Typing [CheckedDecls]
+checkDeclss [] = return []
+checkDeclss (ds:dss) = do
+  ds' <- checkDecls ds
+  (ds':) <$> local (addDecls ds') (checkDeclss dss)
 
 checkTele :: Tele -> Typing ()
 checkTele []          = return ()
@@ -163,8 +155,8 @@ check a t = case (a,t) of
                    check v t `catchError` \e2 ->
                    throwError $ sep [e1,"AND",e2]
   (_,Where e d) -> do
-    checkDecls d
-    local (addDecls d) $ check a e
+    d' <- checkDecls d
+    local (addDecls d') $ check a e
   (_,Undef _) -> return ()
   _ -> do
     logg (sep ["Checking that" <+> pretty t, "has type" <+> pretty a]) $ do
@@ -257,8 +249,8 @@ checkInfer e = case e of
     _ <- checkType u
     return VU
   Where t d -> do
-    checkDecls d
-    local (addDecls d) $ checkInfer t
+    d' <- checkDecls d
+    local (addDecls d') $ checkInfer t
   _ -> oops ("checkInfer " <> pretty e)
 
 checkInferProj :: String -> {- ^ field to project-} Val -> {- ^ record value-} VTele -> {- ^ record type-} Typing Val
