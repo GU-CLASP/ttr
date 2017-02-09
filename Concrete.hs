@@ -13,7 +13,6 @@ import Control.Monad.Except (throwError)
 import Control.Monad (when)
 import Data.Functor.Identity
 import Data.List (nub)
-import TypeChecker (Modules)
 
 type Tele = [(AIdent,Exp)]
 type Ter  = C.Ter
@@ -141,7 +140,7 @@ resolveBranch (Branch lbl args e) = do
     re      <- resolveWhere e
     return (unAIdent lbl, (binder, re))
 
-resolveTele :: [(AIdent,Exp)] -> Resolver C.Tele
+resolveTele :: [(AIdent,Exp)] -> Resolver (C.Tele ())
 resolveTele []        = return []
 resolveTele ((i,d):t) = do
   x <- resolveBinder i
@@ -158,7 +157,7 @@ resolveDDecl (DeclDef  (AIdent (_,n)) args body) =
 resolveDDecl d = throwError $ "Definition expected" <+> showy d
 
 -- Resolve mutual declarations (possibly one)
-resolveMutuals :: [Decl] -> Resolver (C.Decls)
+resolveMutuals :: [Decl] -> Resolver (C.Decls ())
 resolveMutuals decls = do
     let cns = names
     when (nub cns /= cns) $
@@ -177,7 +176,7 @@ resolveMutuals decls = do
     isTDecl d = case d of DeclType{} -> True; _ -> False
 
 -- Resolve declarations
-resolveDecls :: [Decl] -> Resolver [C.Decls]
+resolveDecls :: [Decl] -> Resolver [C.Decls ()]
 resolveDecls []                   = return []
 resolveDecls (td@DeclType{}:d:ds) = do
     (rtd)  <- resolveMutuals [td,d]
@@ -189,5 +188,5 @@ resolveDecls (DeclMutual defs : ds) = do
   return (rdefs : rds)
 resolveDecls (decl:_) = throwError $ "Invalid declaration:" <+> showy decl
 
-resolveModule :: Module -> Resolver [C.Decls] 
+resolveModule :: Module -> Resolver [C.Decls ()] 
 resolveModule (Module _is decls) = resolveDecls decls

@@ -22,60 +22,62 @@ noLoc :: String -> Binder
 noLoc x = (x, Loc "" (0,0))
 
 -- Branch of the form: c x1 .. xn -> e
-type Brc    = (Label,(Binder,Ter))
+type Brc a    = (Label,(Binder,Ter' a))
 
 -- Telescope (x1 : A1) .. (xn : An)
-type Tele   = [(Binder,Ter)]
+type Tele a   = [(Binder,Ter' a)]
 
 -- Labelled sum: c A1
-type LblSum = [(Binder,Ter)]
+type LblSum a = [(Binder,Ter' a)]
 
 -- Context gives type values to identifiers
 type Ctxt   = [(Binder,Val)]
 
 -- Mutual recursive definitions: (x1 : A1) .. (xn : An) and x1 = e1 .. xn = en
-type Decls  = [(Binder,Ter,Ter)]
+type Decls a  = [(Binder,Ter' a,Ter' a)]
 
-declIdents :: Decls -> [Ident]
+declIdents :: Decls a -> [Ident]
 declIdents decl = [ x | ((x,_),_,_) <- decl]
 
-declTers :: Decls -> [Ter]
+declTers :: Decls a -> [Ter' a]
 declTers decl = [ d | (_,_,d) <- decl]
 
-declTele :: Decls -> Tele
+declTele :: Decls a -> Tele a
 declTele decl = [ (x,t) | (x,t,_) <- decl]
 
-declDefs :: Decls -> [(Binder,Ter)]
+declDefs :: Decls () -> [(Binder,Ter)]
 declDefs decl = [ (x,d) | (x,_,d) <- decl]
 
 -- Terms
-data Ter = App Ter Ter
-         | Pi String Ter Ter
-         | Lam Binder Ter
-         | RecordT Tele
-         | Record [(String,Ter)]
-         | Proj String Ter
-         | Where Ter Decls
-         | Var Ident
-         | U
-         -- constructor c Ms
-         | Con Label Ter
-         -- branches c1 xs1  -> M1,..., cn xsn -> Mn
-         | Split Loc [Brc]
-         -- labelled sum c1 A1s,..., cn Ans (assumes terms are constructors)
-         | Sum Loc LblSum
-         | Undef Loc
-         | Prim String
-         | Real Double
-         | Meet Ter Ter
-         | Join Ter Ter
+type Ter = Ter' ()
+type CTer = Ter' Val
+data Ter' a = App (Ter' a) (Ter' a)
+            | Pi String (Ter' a) (Ter' a)
+            | Lam Binder (Ter' a)
+            | RecordT (Tele a)
+            | Record [(String,(Ter' a))]
+            | Proj String (Ter' a)
+            | Where (Ter' a) (Decls a)
+            | Var Ident
+            | U
+            -- constructor c Ms
+            | Con Label (Ter' a)
+            -- branches c1 xs1  -> M1,..., cn xsn -> Mn
+            | Split Loc [Brc a]
+            -- labelled sum c1 A1s,..., cn Ans (assumes (ter' a)ms are constructors)
+            | Sum Loc (LblSum a)
+            | Undef Loc
+            | Prim String
+            | Real Double
+            | Meet (Ter' a) (Ter' a)
+            | Join (Ter' a) (Ter' a)
 
   deriving (Eq)
 
 mkLams :: [String] -> Ter -> Ter
 mkLams bs t = foldr Lam t [ noLoc b | b <- bs ]
 
-mkWheres :: [Decls] -> Ter -> Ter
+mkWheres :: [Decls ()] -> Ter -> Ter
 mkWheres []     e = e
 mkWheres (d:ds) e = Where (mkWheres ds e) d
 
@@ -90,7 +92,7 @@ teleBinders (VBind x _ f) = x:teleBinders (f $ error "teleBinders: cannot look a
 teleBinders _ = []
 
 data Val = VU
-         | Ter Ter Env
+         | Ter CTer Env
          | VPi String Val Val
          | VRecordT VTele
          | VRecord [(String,Val)]
@@ -122,7 +124,7 @@ isNeutral _            = False
 
 data Env = Empty
          | Pair Env (Binder,Val)
-         | PDef [(Binder,Ter)] Env
+         | PDef [(Binder,CTer)] Env
 
 upds :: Env -> [(Binder,Val)] -> Env
 upds = foldl Pair

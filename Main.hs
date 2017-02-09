@@ -90,7 +90,7 @@ initLoop flags f = do
     TC.Loaded adecls -> do
       putStrLn "File loaded."
       -- Compute names for auto completion
-      runInputT (settings [n | (_,tele) <- adecls, (n,_) <- C.teleBinders tele])
+      runInputT (settings [n | (_,_,tele) <- adecls, (n,_) <- C.teleBinders tele])
          (loop flags f (foldl (flip TC.addDecls) TC.verboseEnv adecls))
 
 -- The main loop
@@ -119,9 +119,9 @@ loop flags f tenv@(TC.TEnv _ rho _ _ _) = do
           case x of
             Left err -> do outputStrLn (render ("Could not type-check:" </> err))
                            loop flags f tenv
-            Right typ  -> do
+            Right (body',typ)  -> do
               outputStrLn (render ("TYPE:" </> pretty typ))
-              let e = E.eval rho body
+              let e = E.eval rho body'
               liftIO $ putStrLn (render ("EVAL:" </> pretty e))
               loop flags f tenv
 

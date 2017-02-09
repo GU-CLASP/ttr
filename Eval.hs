@@ -22,7 +22,7 @@ look x r@(PDef es r1) = case lookupIdent x es of
 look x Empty = error ("panic: variable not found in env:" ++ show x)
 
 
-eval :: Env -> Ter -> Val
+eval :: Env -> CTer -> Val
 eval _ U               = VU
 eval e (App r s)       = app (eval e r) (eval e s)
 eval e (Var i)         = snd (look i e)
@@ -95,7 +95,7 @@ lkPrimTy "#>=0" = real --> VU
 lkPrimTy "#Ind" = VU
 lkPrimTy p = error ("No type for primitive: " ++ show p)
 
-evalTele :: Env -> Tele -> VTele
+evalTele :: Env -> Tele Val -> VTele
 evalTele _ [] = VEmpty
 evalTele e (((x,l),t):ts) = VBind (x,l) t' (\x' -> evalTele (Pair e ((x,l),x')) ts)
   where t' = eval e t
@@ -170,7 +170,7 @@ app r s | isNeutral r = VApp r s -- r should be neutral
         | otherwise   = error $ "app: VApp " ++ show r ++ " is not neutral"
 
 
-evals :: Env -> [(Binder,Ter)] -> [(Binder,Val)]
+evals :: Env -> [(Binder,CTer)] -> [(Binder,Val)]
 evals env bts = [ (b,eval env t) | (b,t) <- bts ]
 
 projVal :: String -> Val -> Val
@@ -345,14 +345,14 @@ showEnv e0 = case e0 of
     (PDef _xas env)   -> showEnv env
     (Pair env ((x,_),u)) -> (pretty x <> "=" <> pretty u) : showEnv env
 
-instance Pretty Ter where
+instance Pretty (Ter' a) where
   pretty = showTer 0 Empty
 
-showTele :: Env -> Tele -> [D]
+showTele :: Env -> Tele a -> [D]
 showTele ρ [] = mempty
 showTele ρ (((x,_loc),t):tele) = (pretty x <> " : " <> showTer 0 ρ t) : showTele ρ tele
 
-showTer :: Int -> Env -> Ter -> D
+showTer :: Int -> Env -> Ter' a -> D
 showTer ctx ρ t0 = case t0 of
    U             -> "U"
    (Meet e0 e1)  -> pp 2 $ \p -> p e0 <+> "/\\" <+> p e1
@@ -373,26 +373,26 @@ showTer ctx ρ t0 = case t0 of
    (Undef _)     -> "undefined (1)"
    (Real r)      -> showy r
    (Prim n)      -> showy n
- where pp :: Int -> ((Ter -> D) -> D) -> D
+ where pp :: Int -> ((Ter' a -> D) -> D) -> D
        pp opPrec k = prn opPrec (k (showTer opPrec ρ))
        prn opPrec = (if opPrec < ctx then parens else id)
 
 showSplitBranches ρ branches = encloseSep "{" "}" ";"
   [hang 2 (pretty l <+> ((pretty . fst) bnds) <+> "↦") (showTer 0 ρ t)  | (l,(bnds,t)) <- branches]
 
-showBranch :: Env -> (Binder, Ter) -> D
+showBranch :: Env -> (Binder, Ter' a) -> D
 showBranch env ((b,_),arg) = pretty b <+> (showTer 0 env arg)
 
 instance Pretty Loc where
   pretty (Loc x l) = pretty x <> "@" <> pretty l
 
-showTersArgs :: Env -> [Ter] -> D
+showTersArgs :: Env -> [Ter' a] -> D
 showTersArgs ρ = hcat . map (showTer 5 ρ)
 
-showDecl :: forall a. Pretty a => Env -> (a, Ter, Ter) -> D
+showDecl :: Pretty a => Env -> (a, Ter' b, Ter' b) -> D
 showDecl ρ (b,typ,ter) = vcat [pretty b <+> ":" <+> showTer 0 ρ typ,
                                pretty b <+> "=" <+> showTer 0 ρ ter]
-showDecls :: Env -> Decls -> D
+showDecls :: Env -> Decls a -> D
 showDecls ρ defs = vcat (map (showDecl ρ) defs)
 
 class Value v where
