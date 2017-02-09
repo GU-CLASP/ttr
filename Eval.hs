@@ -134,7 +134,7 @@ meetFields VEmpty fs = fs
 meetFields fs VEmpty = fs
 meetFields fs@(VBind (l,ll) a t) fs'@(VBind (l',ll') a' t')
   | l == l' = VBind (l,ll) (vMeet a a') (\x -> meetFields (t x) (t' x))
-  | lacksField l' fs  = VBind (l,ll') a' (\x -> meetFields fs (t' x))
+  | lacksField l' fs  = VBind (l',ll') a' (\x -> meetFields fs (t' x))
   | lacksField l  fs' = VBind (l,ll)  a  (\x -> meetFields fs' (t x))
   | otherwise = VBot
 meetFields VBot _ = VBot
