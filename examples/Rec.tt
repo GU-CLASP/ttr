@@ -9,9 +9,9 @@ first : (A : Type) -> (B : A -> Type) -> Sigma A B -> A
 first A B r = r.fst
 
 second : (A : Type) -> (B : A -> Type) -> (r : Sigma A B) -> B (r.fst)
-second A B r = r.snd
-
-
+second A B r = snd
+  where open r
+  
 second' : (A : Type) -> (B : A -> Type) -> (r : Sigma A B) -> B (first A B r)
 second' A B r = r.snd
 

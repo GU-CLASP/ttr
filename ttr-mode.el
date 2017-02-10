@@ -2,8 +2,8 @@
 
 ;; define several class of keywords
 (setq ttr-keywords '("data" "import" "mutual" "let" "in" "data" "split"
-                     "module" "where" "U") )
-(setq ttr-special '("undefined" "primitive"))
+                     "module" "where" "open" "primitive") )
+(setq ttr-special '("undefined" "Type"))
 
 ;; create regex strings
 (setq ttr-keywords-regexp (regexp-opt ttr-keywords 'words))

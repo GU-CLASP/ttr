@@ -15,16 +15,6 @@ import Pretty
 import TT
 import Eval
 
-type CheckedDecls = (Decls Val,[Val],VTele)
-
-data ModuleState
-  = Loaded {resolvedDecls :: [CheckedDecls]}
-  | Loading
-  | Failed D
-
-type Modules = [(FilePath,ModuleState)]
-
-
 -- Type checking monad
 type Typing a = ReaderT TEnv (ExceptT D IO) a
 
@@ -66,7 +56,7 @@ addTeleVal (VBind x a rest) lenv = addTypeVal (x,a) (addTeleVal (rest (mkVar (in
 -- | Add a bunch of (already checked) declarations to the environment.
 addDecls :: CheckedDecls -> TEnv -> TEnv
 addDecls (_,[],VEmpty) tenv = tenv
-addDecls ((_:ts),(v:vs),VBind x a bs) (TEnv k rho gam ex verb) =
+addDecls (ts,(v:vs),VBind x a bs) (TEnv k rho gam ex verb) =
   addDecls (ts,vs,bs v) (TEnv k (Pair rho (x,v)) ((x,a):gam) ex verb)
 
 trace :: String -> Typing ()
@@ -77,16 +67,19 @@ trace s = do
 runTyping :: TEnv -> Typing a -> IO (Either D a)
 runTyping env t = runExceptT $ runReaderT t env
 
-checkModule :: Modules -> TEnv -> [String] -> [Decls ()] -> IO (Either D [CheckedDecls])
+checkModule :: Modules -> TEnv -> [String] -> [TDecls ()] -> IO (Either D [CheckedDecls])
 checkModule _ tenv [] dcls = runDecls tenv dcls
 checkModule ms tenv (i:is) dcls = do
   case lookup i ms of
     Nothing -> return $ Left $ sep ["unknow module:", fromString i]
     Just (Loaded dss) -> do
-      checkModule ms (foldl (flip addDecls) tenv dss) is dcls
+      checkModule ms (addDeclss dss tenv) is dcls
 
-runDecls :: TEnv -> [Decls ()] -> IO (Either D [CheckedDecls])
+addDeclss dss tenv = foldl (flip addDecls) tenv dss 
+
+runDecls :: TEnv -> [TDecls ()] -> IO (Either D [CheckedDecls])
 runDecls tenv d = runTyping tenv $ checkDeclss d
+
 
 runInfer :: TEnv -> Ter -> IO (Either D (CTer,Val))
 runInfer lenv e = runTyping lenv (checkInfer e)
@@ -102,8 +95,17 @@ getLblType c u = oops (sep ["expected a data type for the constructor",
 getFresh :: Typing Val
 getFresh = mkVar <$> index <$> ask
 
-checkDecls :: Decls () -> Typing CheckedDecls
-checkDecls d = do
+
+checkDecls :: TDecls () -> Typing CheckedDecls
+
+checkDecls (Open () r) = do
+  (r',t) <- checkInfer r
+  e <- asks env
+  case t of
+    VRecordT tele ->
+      return (Open t r',etaExpandRecord tele (eval e r'),tele)
+    _ -> oops $ "attempt to open something which is not a record"
+checkDecls (Mutual d) = do
   let (idents, tele, ters) = (declIdents d, declTele d, declTers d)
   trace ("Checking: " ++ unwords idents)
   tele' <- checkTele tele
@@ -111,9 +113,9 @@ checkDecls d = do
   let vtele = evalTele e tele'
   ters' <- local (addTeleVal vtele) (checks vtele ters)
   let d' = zipWith (\(b,ty) t -> (b,ty,t)) tele' ters'
-  return (d',map (eval (PDef (zip (map fst tele) ters') e)) ters', vtele) -- allowing recursive definitions
+  return (Mutual d',map (eval (PDef (zip (map fst tele) ters') e)) ters', vtele) -- allowing recursive definitions
 
-checkDeclss :: [Decls ()] -> Typing [CheckedDecls]
+checkDeclss :: [TDecls ()] -> Typing [CheckedDecls]
 checkDeclss [] = return []
 checkDeclss (ds:dss) = do
   ds' <- checkDecls ds
@@ -131,7 +133,7 @@ checkLogg v t = logg (sep ["Checking that " <> pretty t, "has type " <> pretty v
 
 check :: Val -> Ter -> Typing CTer
 check a t = case (a,t) of
-  (_,Con c e) -> do -- FIXME: suspicious; we should expect a sum type here.
+  (_,Con c e) -> do
     (b,nu) <- getLblType c a
     Con c <$> check (eval nu b) e
   (VU,Sum loc bs) -> Sum loc <$> forM bs (\(l,a) -> (l,) <$> checkType a)
@@ -154,9 +156,9 @@ check a t = case (a,t) of
                    check v t `catchError` \e2 ->
                    throwError $ sep [e1,"AND",e2]
   (_,Where e d) -> do
-    d'@(dd,_,_) <- checkDecls d
-    e' <- local (addDecls d') $ check a e
-    return $ Where e' dd
+    d' <- checkDeclss d
+    e' <- local (addDeclss d') $ check a e
+    return $ Where e' [dd | (dd,_,_) <- d']
   (_,Undef x) -> return (Undef x)
   _ -> do
     logg (sep ["Checking that" <+> pretty t, "has type" <+> pretty a]) $ do
@@ -243,8 +245,8 @@ checkInfer e = case e of
     u' <- checkType u
     return (Join t' u', VU)
   Where t d -> do
-    d' <- checkDecls d
-    local (addDecls d') $ checkInfer t
+    d' <- checkDeclss d
+    local (addDeclss d') $ checkInfer t
   _ -> oops ("checkInfer " <> pretty e)
 
 checkInferProj :: String -> {- ^ field to project-} Val -> {- ^ record value-} VTele -> {- ^ record type-} Typing Val

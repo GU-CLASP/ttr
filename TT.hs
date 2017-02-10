@@ -3,6 +3,15 @@
 module TT where
 
 import Data.Dynamic
+import Pretty (D)
+type CheckedDecls = (TDecls Val,[Val],VTele)
+
+data ModuleState
+  = Loaded {resolvedDecls :: [CheckedDecls]}
+  | Loading
+  | Failed D
+
+type Modules = [(FilePath,ModuleState)]
 
 -- | Terms
 
@@ -35,6 +44,8 @@ type Ctxt   = [(Binder,Val)]
 
 -- Mutual recursive definitions: (x1 : A1) .. (xn : An) and x1 = e1 .. xn = en
 type Decls a  = [(Binder,Ter' a,Ter' a)]
+data TDecls a = Open a (Ter' a) | Mutual (Decls a)
+  deriving Eq
 
 declIdents :: Decls a -> [Ident]
 declIdents decl = [ x | ((x,_),_,_) <- decl]
@@ -57,7 +68,7 @@ data Ter' a = App (Ter' a) (Ter' a)
             | RecordT (Tele a)
             | Record [(String,(Ter' a))]
             | Proj String (Ter' a)
-            | Where (Ter' a) (Decls a)
+            | Where (Ter' a) [TDecls a]
             | Var Ident
             | U
             -- constructor c Ms
@@ -76,10 +87,6 @@ data Ter' a = App (Ter' a) (Ter' a)
 
 mkLams :: [String] -> Ter -> Ter
 mkLams bs t = foldr Lam t [ noLoc b | b <- bs ]
-
-mkWheres :: [Decls ()] -> Ter -> Ter
-mkWheres []     e = e
-mkWheres (d:ds) e = Where (mkWheres ds e) d
 
 --------------------------------------------------------------------------------
 -- | Values

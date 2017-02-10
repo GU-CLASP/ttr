@@ -3,7 +3,6 @@
 module Main where
 
 import Data.String
-import Control.Monad.Trans.Reader
 import Control.Monad.Trans.State
 import Control.Monad.Except
 import Data.List
@@ -84,10 +83,10 @@ initLoop flags f = do
   -- Parse and type-check files
   (res,_) <- runStateT (load (dropFileName f) (dropExtension (takeFileName f))) []
   case res of
-    TC.Failed err -> do
+    C.Failed err -> do
       putStrLn $ render $ sep ["Loading failed:",err]
       runInputT (settings []) (loop flags f TC.verboseEnv)
-    TC.Loaded adecls -> do
+    C.Loaded adecls -> do
       putStrLn "File loaded."
       -- Compute names for auto completion
       runInputT (settings [n | (_,_,tele) <- adecls, (n,_) <- C.teleBinders tele])
@@ -125,35 +124,35 @@ loop flags f tenv@(TC.TEnv _ rho _ _ _) = do
               liftIO $ putStrLn (render ("EVAL:" </> pretty e))
               loop flags f tenv
 
-load :: String -> FilePath -> StateT TC.Modules IO TC.ModuleState
+load :: String -> FilePath -> StateT C.Modules IO C.ModuleState
 load prefix f = do
-  (ms::TC.Modules) <- get :: StateT TC.Modules IO TC.Modules
+  (ms::C.Modules) <- get :: StateT C.Modules IO C.Modules
   case lookup f ms of
-    Just TC.Loading -> return $ TC.Failed "cycle in imports"
-    Just r@(TC.Loaded _) -> return r
+    Just C.Loading -> return $ C.Failed "cycle in imports"
+    Just r@(C.Loaded _) -> return r
     Nothing -> do
       let fname = (prefix FP.</> f <.> "tt")
       b <- liftIO $ doesFileExist fname
       if not b
-        then return $ TC.Failed $ sep ["file not found: ", fromString fname]
+        then return $ C.Failed $ sep ["file not found: ", fromString fname]
         else do
           s <- liftIO $ readFile fname
           let ts = lexer s
           case pModule ts of
               Bad err -> do
-                return $ TC.Failed $ sep ["Parse failed in", fromString f, fromString err]
+                return $ C.Failed $ sep ["Parse failed in", fromString f, fromString err]
               Ok m@(Module imp _) -> do
                 let imps = [unAIdent i | Import i <- imp ]
                 forM_ imps (load prefix)
                 ms' <- get
                 case runResolver f (resolveModule m) of
-                  Left err -> return $ TC.Failed $ sep ["Resolver error:", err]
+                  Left err -> return $ C.Failed $ sep ["Resolver error:", err]
                   Right decls -> do
                     merr <- liftIO $ TC.checkModule ms' TC.verboseEnv imps decls
                     case merr of
-                      Left d -> return $ TC.Failed $ sep ["Type-checking failed: ",d]
+                      Left d -> return $ C.Failed $ sep ["Type-checking failed: ",d]
                       Right cdecls -> do
-                          let res = TC.Loaded cdecls
+                          let res = C.Loaded cdecls
                           modify ((f,res):)
                           return res
 

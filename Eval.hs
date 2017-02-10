@@ -21,6 +21,14 @@ look x r@(PDef es r1) = case lookupIdent x es of
   Nothing     -> look x r1
 look x Empty = error ("panic: variable not found in env:" ++ show x)
 
+etaExpandRecord :: VTele -> Val -> [Val]
+etaExpandRecord VEmpty _ = []
+etaExpandRecord (VBind (x,_) _ xs) r = let v = projVal x r in v:etaExpandRecord (xs v) r
+
+addTDecls :: TDecls Val -> Env -> Env
+addTDecls (Mutual decls) ρ = (PDef [ (x,y) | (x,_,y) <- decls ] ρ)
+addTDecls (Open (VRecordT tele) t) ρ = foldl Pair ρ (zip (teleBinders tele) vs) 
+  where vs = etaExpandRecord tele (eval ρ t)
 
 eval :: Env -> CTer -> Val
 eval _ U               = VU
@@ -32,7 +40,7 @@ eval e (Lam x t)       = VLam (fst x) $ \x' -> eval (Pair e (x,x')) t
 eval e (RecordT bs)      = VRecordT $ evalTele e bs
 eval e (Record fs)     = VRecord [(l,eval e x) | (l,x) <- fs]
 eval e (Proj l a)        = projVal l (eval e a)
-eval e (Where t decls) = eval (PDef [ (x,y) | (x,_,y) <- decls ] e) t
+eval e (Where t decls) = eval (foldl (flip addTDecls) e decls) t
 eval e (Con name ts)   = VCon name (eval e ts)
 eval e (Split pr alts) = Ter (Split pr alts) e
 eval e (Sum pr ntss)   = Ter (Sum pr ntss) e
@@ -309,7 +317,9 @@ showVal ctx t0 = case t0 of
        pp opPrec k = prn opPrec (k (showVal opPrec))
        prn opPrec = (if opPrec < ctx then parens else id)
 
+occursIn :: forall v. Value v => String -> v -> Bool
 x `occursIn` a = x `elem` unknowns a
+dependent :: Val -> Bool
 dependent f =  "__DEPENDS?__" `occursIn` (f `app` VVar "__DEPENDS?__")
 
 showArgs :: [Val] -> D
@@ -349,7 +359,7 @@ instance Pretty (Ter' a) where
   pretty = showTer 0 Empty
 
 showTele :: Env -> Tele a -> [D]
-showTele ρ [] = mempty
+showTele _ [] = mempty
 showTele ρ (((x,_loc),t):tele) = (pretty x <> " : " <> showTer 0 ρ t) : showTele ρ tele
 
 showTer :: Int -> Env -> Ter' a -> D
@@ -365,7 +375,7 @@ showTer ctx ρ t0 = case t0 of
    (Proj l e)    -> pp 5 (\p -> p e <> "." <> pretty l)
    (RecordT ts)  -> encloseSep "[" "]" ";" (showTele ρ ts)
    (Record fs)   -> encloseSep "(" ")" "," [pretty l <> " = " <> showTer 0 ρ e | (l,e) <- fs]
-   (Where e d)   -> pp 0 (\p -> hang 2 (p e) (hang 2 "where" (showDecls ρ d)))
+   (Where e d)   -> pp 0 (\p -> hang 2 (p e) (hang 2 "where" (vcat $ map (showDecls ρ) d)))
    (Var x)       -> prettyLook x ρ
    (Con c es)    -> "`" <> pretty c <+> showTer 5 ρ es
    (Split _l branches)   -> hang 2 "split" (showSplitBranches ρ branches)
@@ -392,8 +402,10 @@ showTersArgs ρ = hcat . map (showTer 5 ρ)
 showDecl :: Pretty a => Env -> (a, Ter' b, Ter' b) -> D
 showDecl ρ (b,typ,ter) = vcat [pretty b <+> ":" <+> showTer 0 ρ typ,
                                pretty b <+> "=" <+> showTer 0 ρ ter]
-showDecls :: Env -> Decls a -> D
-showDecls ρ defs = vcat (map (showDecl ρ) defs)
+
+showDecls :: Env -> TDecls a -> D
+showDecls ρ (Open _ x) = "open " <> showTer 0 ρ x
+showDecls ρ (Mutual defs) = vcat (map (showDecl ρ) defs)
 
 class Value v where
   unknowns :: v -> [String] -- aka "free variables"

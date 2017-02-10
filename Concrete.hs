@@ -115,9 +115,7 @@ resolveExp (Split brs)  = do
     brs' <- mapM resolveBranch brs
     loc  <- getLoc (case brs of Branch (AIdent (l,_)) _ _:_ -> l ; _ -> (0,0))
     return $ C.Split loc brs'
-resolveExp (Let decls e) = do
-  rdecls <- resolveDecls decls
-  C.mkWheres rdecls <$> (resolveExp e)
+resolveExp (Let decls e) = flip C.Where <$> resolveDecls decls <*> resolveExp e
 resolveExp (Real r) = return (C.Real r)
 resolveExp (PrimOp p) = return (C.Prim p)
 resolveExp (And t u) = C.Meet <$> resolveExp t <*> resolveExp u
@@ -176,17 +174,21 @@ resolveMutuals decls = do
     isTDecl d = case d of DeclType{} -> True; _ -> False
 
 -- Resolve declarations
-resolveDecls :: [Decl] -> Resolver [C.Decls ()]
+resolveDecls :: [Decl] -> Resolver [C.TDecls ()]
 resolveDecls []                   = return []
+resolveDecls (DeclOpen d:ds) = do
+    d' <- C.Open () <$> resolveExp d
+    (rds) <- resolveDecls ds
+    return (d' : rds)
 resolveDecls (td@DeclType{}:d:ds) = do
     (rtd)  <- resolveMutuals [td,d]
     (rds) <- resolveDecls ds
-    return (rtd : rds)
+    return (C.Mutual rtd : rds)
 resolveDecls (DeclMutual defs : ds) = do
   (rdefs)  <- resolveMutuals defs
   (rds) <- resolveDecls ds
-  return (rdefs : rds)
+  return (C.Mutual rdefs : rds)
 resolveDecls (decl:_) = throwError $ "Invalid declaration:" <+> showy decl
 
-resolveModule :: Module -> Resolver [C.Decls ()] 
+resolveModule :: Module -> Resolver [C.TDecls ()] 
 resolveModule (Module _is decls) = resolveDecls decls
