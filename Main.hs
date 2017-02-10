@@ -86,11 +86,11 @@ initLoop flags f = do
     C.Failed err -> do
       putStrLn $ render $ sep ["Loading failed:",err]
       runInputT (settings []) (loop flags f TC.verboseEnv)
-    C.Loaded adecls -> do
+    C.Loaded (avals,atele) -> do
       putStrLn "File loaded."
       -- Compute names for auto completion
-      runInputT (settings [n | (_,_,tele) <- adecls, (n,_) <- C.teleBinders tele])
-         (loop flags f (foldl (flip TC.addDecls) TC.verboseEnv adecls))
+      runInputT (settings [n | (n,_) <- C.teleBinders atele])
+         (loop flags f (TC.addDecls (avals,atele) TC.verboseEnv))
 
 -- The main loop
 loop :: [Flag] -> FilePath -> TC.TEnv -> Interpreter ()

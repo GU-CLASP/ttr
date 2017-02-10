@@ -54,10 +54,10 @@ addTeleVal VEmpty lenv = lenv
 addTeleVal (VBind x a rest) lenv = addTypeVal (x,a) (addTeleVal (rest (mkVar (index lenv))) lenv) 
 
 -- | Add a bunch of (already checked) declarations to the environment.
-addDecls :: CheckedDecls -> TEnv -> TEnv
-addDecls (_,[],VEmpty) tenv = tenv
-addDecls (ts,(v:vs),VBind x a bs) (TEnv k rho gam ex verb) =
-  addDecls (ts,vs,bs v) (TEnv k (Pair rho (x,v)) ((x,a):gam) ex verb)
+addDecls :: Recordoid -> TEnv -> TEnv
+addDecls ([],VEmpty) tenv = tenv
+addDecls ((v:vs),VBind x a bs) (TEnv k rho gam ex verb) =
+  addDecls (vs,bs v) (TEnv k (Pair rho (x,v)) ((x,a):gam) ex verb)
 
 trace :: String -> Typing ()
 trace s = do
@@ -67,18 +67,16 @@ trace s = do
 runTyping :: TEnv -> Typing a -> IO (Either D a)
 runTyping env t = runExceptT $ runReaderT t env
 
-checkModule :: Modules -> TEnv -> [String] -> [TDecls ()] -> IO (Either D [CheckedDecls])
+checkModule :: Modules -> TEnv -> [String] -> [TDecls ()] -> IO (Either D Recordoid)
 checkModule _ tenv [] dcls = runDecls tenv dcls
 checkModule ms tenv (i:is) dcls = do
   case lookup i ms of
     Nothing -> return $ Left $ sep ["unknow module:", fromString i]
     Just (Loaded dss) -> do
-      checkModule ms (addDeclss dss tenv) is dcls
+      checkModule ms (addDecls dss tenv) is dcls
 
-addDeclss dss tenv = foldl (flip addDecls) tenv dss 
-
-runDecls :: TEnv -> [TDecls ()] -> IO (Either D [CheckedDecls])
-runDecls tenv d = runTyping tenv $ checkDeclss d
+runDecls :: TEnv -> [TDecls ()] -> IO (Either D Recordoid)
+runDecls tenv d = runTyping tenv ( snd <$> checkDeclss d)
 
 
 runInfer :: TEnv -> Ter -> IO (Either D (CTer,Val))
@@ -96,14 +94,13 @@ getFresh :: Typing Val
 getFresh = mkVar <$> index <$> ask
 
 
-checkDecls :: TDecls () -> Typing CheckedDecls
-
+checkDecls :: TDecls () -> Typing (TDecls Val,Recordoid)
 checkDecls (Open () r) = do
   (r',t) <- checkInfer r
   e <- asks env
   case t of
     VRecordT tele ->
-      return (Open t r',etaExpandRecord tele (eval e r'),tele)
+      return (Open t r',(etaExpandRecord tele (eval e r'),tele))
     _ -> oops $ "attempt to open something which is not a record"
 checkDecls (Mutual d) = do
   let (idents, tele, ters) = (declIdents d, declTele d, declTers d)
@@ -113,13 +110,14 @@ checkDecls (Mutual d) = do
   let vtele = evalTele e tele'
   ters' <- local (addTeleVal vtele) (checks vtele ters)
   let d' = zipWith (\(b,ty) t -> (b,ty,t)) tele' ters'
-  return (Mutual d',map (eval (PDef (zip (map fst tele) ters') e)) ters', vtele) -- allowing recursive definitions
+  return (Mutual d',(map (eval (PDef (zip (map fst tele) ters') e)) ters', vtele)) -- allowing recursive definitions
 
-checkDeclss :: [TDecls ()] -> Typing [CheckedDecls]
-checkDeclss [] = return []
+checkDeclss :: [TDecls ()] -> Typing ([TDecls Val],Recordoid)
+checkDeclss [] = return ([],([],VEmpty))
 checkDeclss (ds:dss) = do
-  ds' <- checkDecls ds
-  (ds':) <$> local (addDecls ds') (checkDeclss dss)
+  (ds',(vs,tele)) <- checkDecls ds
+  (dss',(vss,teles)) <- local (addDecls (vs,tele)) (checkDeclss dss)
+  return (ds':dss',(vs<>vss,tele<>teles))
 
 checkTele :: Tele () -> Typing (Tele Val)
 checkTele []          = return []
@@ -156,9 +154,9 @@ check a t = case (a,t) of
                    check v t `catchError` \e2 ->
                    throwError $ sep [e1,"AND",e2]
   (_,Where e d) -> do
-    d' <- checkDeclss d
-    e' <- local (addDeclss d') $ check a e
-    return $ Where e' [dd | (dd,_,_) <- d']
+    (dd,d') <- checkDeclss d
+    e' <- local (addDecls d') $ check a e
+    return $ Where e' dd
   (_,Undef x) -> return (Undef x)
   _ -> do
     logg (sep ["Checking that" <+> pretty t, "has type" <+> pretty a]) $ do
@@ -245,8 +243,8 @@ checkInfer e = case e of
     u' <- checkType u
     return (Join t' u', VU)
   Where t d -> do
-    d' <- checkDeclss d
-    local (addDeclss d') $ checkInfer t
+    (_,d') <- checkDeclss d
+    local (addDecls d') $ checkInfer t
   _ -> oops ("checkInfer " <> pretty e)
 
 checkInferProj :: String -> {- ^ field to project-} Val -> {- ^ record value-} VTele -> {- ^ record type-} Typing Val

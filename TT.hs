@@ -2,12 +2,13 @@
 {-# LANGUAGE PatternSynonyms, OverloadedStrings #-}
 module TT where
 
+import Data.Monoid
 import Data.Dynamic
 import Pretty (D)
 type CheckedDecls = (TDecls Val,[Val],VTele)
-
+type Recordoid = ([Val],VTele)
 data ModuleState
-  = Loaded {resolvedDecls :: [CheckedDecls]}
+  = Loaded {resolvedDecls :: Recordoid}
   | Loading
   | Failed D
 
@@ -93,6 +94,11 @@ mkLams bs t = foldr Lam t [ noLoc b | b <- bs ]
 
 data VTele = VEmpty | VBind Binder Val (Val -> VTele)
            | VBot -- Hack!
+
+instance Monoid VTele where
+  mempty = VEmpty
+  mappend VEmpty x = x
+  mappend (VBind x a xas) ys = VBind x a (\v -> xas v <> ys)
 
 teleBinders :: VTele -> [Binder]
 teleBinders (VBind x _ f) = x:teleBinders (f $ error "teleBinders: cannot look at values")
