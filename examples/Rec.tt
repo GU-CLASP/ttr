@@ -9,23 +9,48 @@ first : (A : Type) -> (B : A -> Type) -> Sigma A B -> A
 first A B r = r.fst
 
 second : (A : Type) -> (B : A -> Type) -> (r : Sigma A B) -> B (r.fst)
-second A B r = snd
-  where open r
-  
+second A B r = r.snd
+
 second' : (A : Type) -> (B : A -> Type) -> (r : Sigma A B) -> B (first A B r)
 second' A B r = r.snd
 
 Params : Type
 Params = [Ind : Type;
-          Animal Human Dog : Ind -> Type;
-          Hug : Ind -> Ind -> Type]
+          Animal Human Dog Donkey : Ind -> Type;
+          Hug Owns : Ind -> Ind -> Type;
+          a0 : Ind;
+          aH : Human a0;
+          aA : Animal a0
+          ]
 
-Anim : Params -> Type
-Anim params = [x : params.Ind; isAnimal : params.Animal x]
+examples : Params -> Type
+examples params = []
+ where
+   open params
 
-Huma : Params -> Type
-Huma params = Anim params /\ [x : params.Ind; isHuman : params.Human x]
+   PN : Type
+   PN = [x : Ind; cn : Ind -> Type; isCn : cn x]
 
-all : Params -> [Anim : Type; Huma : Type]
-all params = (Anim = Anim params,
-              Huma = Huma params)
+   Anim : Type
+   Anim = [x : Ind; isAnimal : Animal x]
+
+   Huma : Type
+   Huma = Anim /\ [x : Ind; isHuman : Human x]
+
+   a : Huma
+   a = (x = a0, isHuman = aH, isAnimal = aA)
+
+   b : Anim
+   b = a
+
+   ManOwnADonkey : Type
+   ManOwnADonkey = [x : Ind;
+                    y : Ind;
+                    p : Human x;
+                    q : Donkey y;
+                    o : Owns x y]
+
+   f : ManOwnADonkey -> Huma
+   f r = (x = x, isHuman = p, isAnimal = _)
+     where open r
+
