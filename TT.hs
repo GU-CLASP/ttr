@@ -69,6 +69,7 @@ data Ter' a = App (Ter' a) (Ter' a)
             | Record [(String,(Ter' a))]
             | Proj String (Ter' a)
             | Where (Ter' a) [TDecls a]
+            | Module [TDecls a]
             | Var Ident
             | U
             -- constructor c Ms

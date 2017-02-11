@@ -97,6 +97,7 @@ binds :: (String -> Ter -> Ter -> Ter) -> Tele -> Resolver Ter -> Resolver Ter
 binds f = flip $ foldr $ bind f
 
 resolveExp :: Exp -> Resolver Ter
+resolveExp (Module dcls) = C.Module <$> resolveDecls dcls
 resolveExp U            = return C.U
 resolveExp (Var x)      = resolveVar x
 resolveExp (App t s)    = C.App <$> resolveExp t <*> resolveExp s
@@ -190,5 +191,5 @@ resolveDecls (DeclMutual defs : ds) = do
   return (C.Mutual rdefs : rds)
 resolveDecls (decl:_) = throwError $ "Invalid declaration:" <+> showy decl
 
-resolveModule :: Module -> Resolver [C.TDecls ()] 
-resolveModule (Module _is decls) = resolveDecls decls
+resolveModule :: File -> Resolver Ter
+resolveModule (File _is decls) = resolveExp decls

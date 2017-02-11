@@ -68,11 +68,11 @@ trace s = do
 runTyping :: TEnv -> Typing a -> IO (Either D a)
 runTyping env t = runExceptT $ runReaderT t env
 
-checkModule :: Modules -> TEnv -> [String] -> [TDecls ()] -> IO ModuleState
+checkModule :: Modules -> TEnv -> [String] -> Ter -> IO ModuleState
 checkModule _ tenv [] dcls = runModule tenv dcls
 checkModule ms tenv (i:is) dcls = do
   case lookup i ms of
-    Nothing -> return $ Failed $ sep ["unknow module:", fromString i]
+    Nothing -> return $ Failed $ sep ["unknown module:", fromString i]
     Just (Failed d) -> return $ Failed $ sep ["failed dependency: " <> fromString i,d]
     Just (Loaded val typ) -> do
       checkModule ms (addDecl (i,Loc "<import>" (0,0)) val typ tenv) is dcls
@@ -80,19 +80,19 @@ checkModule ms tenv (i:is) dcls = do
 mconcatRecordoids rs = (mconcat valss, mconcat teles)
   where (valss,teles) = unzip rs
   
-runModule :: TEnv -> [TDecls ()] -> IO ModuleState
-runModule tenv d =
-  do m0 <- runTyping tenv (checkDeclss d)
+runModule :: TEnv -> Ter -> IO ModuleState
+runModule tenv e =
+  do m0 <- runInfer tenv e
      return $ case m0 of
        Left err -> Failed err
-       Right dss -> do
-         let (vals,tele) = mconcatRecordoids [r | (Mutual _,r) <- dss]
-         -- note: do not re-rexport "opens"
-         Loaded (VRecord (zip (map fst $ teleBinders tele) vals)) (VRecordT tele)
+       Right (v,a) -> Loaded v a
 
 
-runInfer :: TEnv -> Ter -> IO (Either D (CTer,Val))
-runInfer lenv e = runTyping lenv (checkInfer e)
+runInfer :: TEnv -> Ter -> IO (Either D (Val,Val))
+runInfer lenv t = runTyping lenv $ do
+  (t',a) <- checkInfer t
+  e <- asks env
+  return (eval e t', a)
 
 -- Extract the type of a label as a closure
 getLblType :: String -> Val -> Typing (CTer, Env)
@@ -215,6 +215,11 @@ checkType t = do
 -- | Infer the type of the argument
 checkInfer :: Ter -> Typing (CTer,Val)
 checkInfer e = case e of
+  Module dclss -> do
+    dss <- checkDeclss dclss
+    let (_vals,tele) = mconcatRecordoids [r | (Mutual _,r) <- dss]
+    -- note: we do not re-rexport "opens"
+    return (Module (map fst dss),VRecordT tele)
   Real x -> return (Real x, real)
   Prim p -> return (Prim p,lkPrimTy p)
   Pi x' a (Lam x b) -> do

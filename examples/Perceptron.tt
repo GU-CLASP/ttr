@@ -1,8 +1,8 @@
-module where
+import Lists;
+import Props;
+import Reals;
 
-import Lists
-import Props
-import Reals
+module
 
 open Lists
 open Props

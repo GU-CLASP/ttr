@@ -1,13 +1,13 @@
-entrypoints Module, Exp ;
+entrypoints File, Exp ;
 
 comment "--" ;
 comment "{-" "-}" ;
 
-layout "where", "let", "split", "mutual" ;
+layout "where", "let", "split", "mutual", "module" ;
 layout stop "in" ;
 -- Do not use layout toplevel as it makes pExp fail!
 
-Module.   Module ::= "module" "where" "{" [Imp] [Decl] "}" ;
+File.   File ::=  [Imp] Exp ;
 
 Import.   Imp ::= "import" AIdent ;
 separator Imp ";" ;
@@ -24,8 +24,9 @@ separator   Decl ";" ;
 Where.    ExpWhere ::= Exp "where" "{" [Decl] "}" ;
 NoWhere.  ExpWhere ::= Exp ;
 
+Module.   Exp  ::= "module" "{" [Decl] "}" ;
 Let.      Exp  ::= "let"  "{" [Decl] "}" "in" Exp ;
-Lam.      Exp1  ::= "\\" AIdent [AIdent] "->" Exp1 ;
+Lam.      Exp1 ::= "\\" AIdent [AIdent] "->" Exp1 ;
 Fun.      Exp1 ::= Exp2 "->" Exp1 ;
 Pi.       Exp1 ::= "(" PseudoTDecl ")" "->" Exp1 ;
 Or.       Exp2 ::= Exp2 "\\/" Exp2;

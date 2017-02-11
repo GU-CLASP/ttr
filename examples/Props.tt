@@ -1,4 +1,4 @@
-module where
+module
 
 Bot : Type  -- do not move this type otherwise it won't be found by primops.
 Bot = { }

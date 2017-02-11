@@ -25,10 +25,14 @@ etaExpandRecord :: VTele -> Val -> [Val]
 etaExpandRecord VEmpty _ = []
 etaExpandRecord (VBind (x,_) _ xs) r = let v = projVal x r in v:etaExpandRecord (xs v) r
 
-addTDecls :: TDecls Val -> Env -> Env
-addTDecls (Mutual decls) ρ = (PDef [ (x,y) | (x,_,y) <- decls ] ρ)
-addTDecls (Open (VRecordT tele) t) ρ = foldl Pair ρ (zip (teleBinders tele) vs) 
+evalDecls :: TDecls Val -> Env -> (Env,[(String,Val)])
+evalDecls (Mutual decls) ρ = (ρ',[(x,eval ρ' y) | ((x,_),_,y) <- decls])
+  where ρ' = PDef [ (x,y) | (x,_,y) <- decls ] ρ
+evalDecls (Open (VRecordT tele) t) ρ = (foldl Pair ρ (zip (teleBinders tele) vs),[])
   where vs = etaExpandRecord tele (eval ρ t)
+
+evalDeclss :: [TDecls Val] -> Env -> (Env,[(String,Val)])
+evalDeclss dss ρ = foldl (\(e,vs) ds -> let (e',vs') = evalDecls ds e in (e',vs++vs')) (ρ,[]) dss
 
 eval :: Env -> CTer -> Val
 eval _ U               = VU
@@ -40,7 +44,8 @@ eval e (Lam x t)       = VLam (fst x) $ \x' -> eval (Pair e (x,x')) t
 eval e (RecordT bs)      = VRecordT $ evalTele e bs
 eval e (Record fs)     = VRecord [(l,eval e x) | (l,x) <- fs]
 eval e (Proj l a)        = projVal l (eval e a)
-eval e (Where t decls) = eval (foldl (flip addTDecls) e decls) t
+eval e (Where t decls) = eval (fst (evalDeclss decls e)) t
+eval e (Module decls)  = VRecord (snd (evalDeclss decls e))
 eval e (Con name ts)   = VCon name (eval e ts)
 eval e (Split pr alts) = Ter (Split pr alts) e
 eval e (Sum pr ntss)   = Ter (Sum pr ntss) e

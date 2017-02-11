@@ -1,6 +1,7 @@
-module where
-import Lists
+import Lists;
 import Props
+
+module
 
 open Lists
 open Props
