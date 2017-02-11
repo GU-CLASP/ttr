@@ -1,4 +1,4 @@
-module   where
+module
 
 Sigma : (A : Type) -> (B : A -> Type) -> Type
 Sigma A B = [fst : A ;

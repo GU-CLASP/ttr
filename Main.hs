@@ -67,7 +67,7 @@ main = do
       | otherwise -> case files of
        []  -> do
          putStrLn welcome
-         runInputT (settings []) (loop flags [] TC.verboseEnv)
+         runInputT (settings []) (loop flags [] (TC.verboseEnv []))
        [f] -> do
          putStrLn welcome
          putStrLn $ "Loading " ++ show f
@@ -81,8 +81,8 @@ main = do
 initLoop :: [Flag] -> FilePath -> IO ()
 initLoop flags f = do
   -- Parse and type-check files
-  (res,_) <- runStateT (load (dropFileName f) (dropExtension (takeFileName f))) []
-  let k ns e = runInputT (settings ns) (loop flags f (e TC.verboseEnv))
+  (res,ms) <- runStateT (load (dropFileName f) (dropExtension (takeFileName f))) []
+  let k ns e = runInputT (settings ns) (loop flags f (e (TC.verboseEnv ms)))
   case res of
     C.Failed err -> do
       putStrLn $ render $ sep ["Loading failed:",err]
@@ -100,7 +100,7 @@ go _ _ k = do putStrLn $ "Module does not have a record type."
 
 -- The main loop
 loop :: [Flag] -> FilePath -> TC.TEnv -> Interpreter ()
-loop flags f tenv@(TC.TEnv _ rho _ _ _) = do
+loop flags f tenv@(TC.TEnv _ rho _ _ _ ms) = do
   input <- getInputLine prompt
   case input of
     Nothing    -> outputStrLn help >> loop flags f tenv
@@ -119,7 +119,7 @@ loop flags f tenv@(TC.TEnv _ rho _ _ _) = do
         case runResolver {- FIXME -} "<interactive>" $ resolveExp expr of
           Left  err  -> do outputStrLn (render ("Resolver failed:" </> err))
                            loop flags f tenv
-          Right body -> do
+          Right (body,(),_imports_ignored_here) -> do
           x <- liftIO $ TC.runInfer tenv body
           case x of
             Left err -> do outputStrLn (render ("Could not type-check:" </> err))
@@ -144,17 +144,16 @@ load prefix f = do
         else do
           s <- liftIO $ readFile fname
           let ts = lexer s
-          case pFile ts of
+          case pExp ts of
               Bad err -> do
                 return $ C.Failed $ sep ["Parse failed in", fromString f, fromString err]
-              Ok m@(File imp _) -> do
-                let imps = [unAIdent i | Import i <- imp ]
-                forM_ imps (load prefix)
-                ms' <- get
-                case runResolver f (resolveModule m) of
+              Ok m -> do
+                case runResolver f (resolveExp m) of
                   Left err -> return $ C.Failed $ sep ["Resolver error:", err]
-                  Right decls -> do
-                    liftIO $ TC.checkModule ms' TC.verboseEnv imps decls
+                  Right (t,_,imps) -> do
+                    forM_ imps (load prefix)
+                    ms' <- get
+                    liftIO $ TC.runModule (TC.verboseEnv ms') t
       modify ((f,res):)
       return res
 

@@ -11,7 +11,7 @@ data ModuleState
   | Loading
   | Failed D
 
-type Modules = [(FilePath,ModuleState)]
+type Modules = [(String,ModuleState)]
 
 -- | Terms
 
@@ -44,7 +44,7 @@ type Ctxt   = [(Binder,Val)]
 
 -- Mutual recursive definitions: (x1 : A1) .. (xn : An) and x1 = e1 .. xn = en
 type Decls a  = [(Binder,Ter' a,Ter' a)]
-data TDecls a = Open a (Ter' a) | Mutual (Decls a)
+data TDecls a = Open a {- type of the opened term -} (Ter' a) | Mutual (Decls a)
   deriving Eq
 
 declIdents :: Decls a -> [Ident]
@@ -80,6 +80,7 @@ data Ter' a = App (Ter' a) (Ter' a)
             | Sum Loc (LblSum a)
             | Undef Loc
             | Prim String
+            | Import String a -- the value of the imported thing
             | Real Double
             | Meet (Ter' a) (Ter' a)
             | Join (Ter' a) (Ter' a)

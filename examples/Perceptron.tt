@@ -1,12 +1,8 @@
-import Lists;
-import Props;
-import Reals;
-
 module
 
-open Lists
-open Props
-open Reals
+open import Lists
+open import Props
+open import Reals
 
 Ind : Type
 Ind = primitive "#Ind"

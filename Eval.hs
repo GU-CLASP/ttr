@@ -53,6 +53,7 @@ eval _ (Undef _)       = error "undefined (2)"
 eval _ (Real r)        = VPrim (toDyn r) (show r)
 eval _ (Prim ('#':nm)) = VAbstract nm
 eval _ (Prim nm)       = lkPrim nm
+eval _ (Import _ v)    = v
 eval e (Meet t u)      = vMeet (eval e t) (eval e u)
 eval e (Join t u)      = vJoin (eval e t) (eval e u)
 
@@ -369,6 +370,8 @@ showTele ρ (((x,_loc),t):tele) = (pretty x <> " : " <> showTer 0 ρ t) : showTe
 
 showTer :: Int -> Env -> Ter' a -> D
 showTer ctx ρ t0 = case t0 of
+   Import i _    -> sep ["import",pretty i]
+   Module ds     -> hang 2 "module"  (vcat (map (showDecls ρ) ds))
    U             -> "U"
    (Meet e0 e1)  -> pp 2 $ \p -> p e0 <+> "/\\" <+> p e1
    (Join e0 e1)  -> pp 2 $ \p -> p e0 <+> "\\/" <+> p e1

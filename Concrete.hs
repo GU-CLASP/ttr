@@ -7,7 +7,7 @@ import Exp.Abs
 import qualified TT as C
 import Pretty
 
-import Control.Monad.Trans.Reader
+import Control.Monad.Trans.RWS
 import Control.Monad.Trans.Except
 import Control.Monad.Except (throwError)
 import Control.Monad (when)
@@ -65,10 +65,10 @@ data SymKind = Variable -- TODO: delete
 -- local environment for constructors
 data Env = Env { envFile :: String }
 
-type Resolver a = ReaderT Env (ExceptT D Identity) a
+type Resolver a = RWST Env [String] () (ExceptT D Identity) a
 
-runResolver :: FilePath -> Resolver a -> Either D a
-runResolver f x = runIdentity $ runExceptT $ runReaderT x (Env f)
+runResolver :: FilePath -> Resolver a -> Either D (a,(),[String])
+runResolver f x = runIdentity $ runExceptT $ runRWST x (Env f) ()
 
 getModule :: Resolver String
 getModule = envFile <$> ask
@@ -97,6 +97,7 @@ binds :: (String -> Ter -> Ter -> Ter) -> Tele -> Resolver Ter -> Resolver Ter
 binds f = flip $ foldr $ bind f
 
 resolveExp :: Exp -> Resolver Ter
+resolveExp (Import (AIdent (_,i))) = tell [i] >> return (C.Import i ())
 resolveExp (Module dcls) = C.Module <$> resolveDecls dcls
 resolveExp U            = return C.U
 resolveExp (Var x)      = resolveVar x
@@ -190,6 +191,3 @@ resolveDecls (DeclMutual defs : ds) = do
   (rds) <- resolveDecls ds
   return (C.Mutual rdefs : rds)
 resolveDecls (decl:_) = throwError $ "Invalid declaration:" <+> showy decl
-
-resolveModule :: File -> Resolver Ter
-resolveModule (File _is decls) = resolveExp decls

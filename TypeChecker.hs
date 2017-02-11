@@ -3,6 +3,7 @@
 module TypeChecker where
 
 import Data.Function
+import Data.Either (either)
 import Data.List
 import Data.Monoid hiding (Sum)
 import Control.Monad
@@ -26,6 +27,7 @@ data TEnv = TEnv { index   :: Int   -- for de Bruijn levels
                  , errCtx  :: [D]
                  , verbose :: Bool  -- Should it be verbose and print
                                     -- what it typechecks?
+                 , modules :: Modules
                  }
 
 showCtxt :: Show a => [(([Char], t), a)] -> [Char]
@@ -42,13 +44,13 @@ oops msg = do
                      "in environment" <> pretty env,
                      "in context" <+> pretty ctxt]
 
-verboseEnv, silentEnv :: TEnv
+verboseEnv, silentEnv :: Modules -> TEnv
 verboseEnv = TEnv 0 Empty [] [] True
 silentEnv  = TEnv 0 Empty [] [] False
 
 addTypeVal :: (Binder, Val) -> TEnv -> TEnv
-addTypeVal p@(x,_) (TEnv k rho gam ex v) =
-  TEnv (k+1) (Pair rho (x,mkVar k)) (p:gam) ex v
+addTypeVal p@(x,_) (TEnv k rho gam ex v ms) =
+  TEnv (k+1) (Pair rho (x,mkVar k)) (p:gam) ex v ms
 
 addTeleVal :: VTele -> TEnv -> TEnv
 addTeleVal VEmpty lenv = lenv
@@ -58,7 +60,7 @@ addTeleVal (VBind x a rest) lenv = addTypeVal (x,a) (addTeleVal (rest (mkVar (in
 addDecls :: Recordoid -> TEnv -> TEnv
 addDecls ([],VEmpty) = id
 addDecls ((v:vs),VBind x a bs) = addDecls (vs,bs v) . addDecl x v a
-addDecl x v a (TEnv k rho gam ex verb) = (TEnv k (Pair rho (x,v)) ((x,a):gam) ex verb)
+addDecl x v a (TEnv k rho gam ex verb ms) = (TEnv k (Pair rho (x,v)) ((x,a):gam) ex verb) ms
 
 trace :: String -> Typing ()
 trace s = do
@@ -68,25 +70,11 @@ trace s = do
 runTyping :: TEnv -> Typing a -> IO (Either D a)
 runTyping env t = runExceptT $ runReaderT t env
 
-checkModule :: Modules -> TEnv -> [String] -> Ter -> IO ModuleState
-checkModule _ tenv [] dcls = runModule tenv dcls
-checkModule ms tenv (i:is) dcls = do
-  case lookup i ms of
-    Nothing -> return $ Failed $ sep ["unknown module:", fromString i]
-    Just (Failed d) -> return $ Failed $ sep ["failed dependency: " <> fromString i,d]
-    Just (Loaded val typ) -> do
-      checkModule ms (addDecl (i,Loc "<import>" (0,0)) val typ tenv) is dcls
-
 mconcatRecordoids rs = (mconcat valss, mconcat teles)
   where (valss,teles) = unzip rs
-  
-runModule :: TEnv -> Ter -> IO ModuleState
-runModule tenv e =
-  do m0 <- runInfer tenv e
-     return $ case m0 of
-       Left err -> Failed err
-       Right (v,a) -> Loaded v a
 
+runModule :: TEnv -> Ter -> IO ModuleState
+runModule tenv e = either Failed (uncurry Loaded) <$> runInfer tenv e
 
 runInfer :: TEnv -> Ter -> IO (Either D (Val,Val))
 runInfer lenv t = runTyping lenv $ do
@@ -215,6 +203,13 @@ checkType t = do
 -- | Infer the type of the argument
 checkInfer :: Ter -> Typing (CTer,Val)
 checkInfer e = case e of
+  Import i () -> do
+    ms <- asks modules
+    case lookup i ms of
+      Nothing -> throwError $ sep ["unknown module:", fromString i]
+      Just (Failed d) -> throwError $ sep ["failed dependency: " <> fromString i,d]
+      Just (Loaded val typ) -> do
+        return (Import i val, typ)
   Module dclss -> do
     dss <- checkDeclss dclss
     let (_vals,tele) = mconcatRecordoids [r | (Mutual _,r) <- dss]

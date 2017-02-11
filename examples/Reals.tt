@@ -1,10 +1,7 @@
-import Lists;
-import Props
-
 module
 
-open Lists
-open Props
+open import Lists
+open import Props
 
 Real : Type
 Real = primitive "#R"

@@ -1,4 +1,4 @@
-entrypoints File, Exp ;
+entrypoints Exp ;
 
 comment "--" ;
 comment "{-" "-}" ;
@@ -6,11 +6,6 @@ comment "{-" "-}" ;
 layout "where", "let", "split", "mutual", "module" ;
 layout stop "in" ;
 -- Do not use layout toplevel as it makes pExp fail!
-
-File.   File ::=  [Imp] Exp ;
-
-Import.   Imp ::= "import" AIdent ;
-separator Imp ";" ;
 
 Field.      Fld ::= AIdent "=" Exp ;
 separator Fld ",";
@@ -42,6 +37,7 @@ U.        Exp6 ::= "Type" ;
 Real.     Exp6 ::= Double ;
 Split.    Exp6  ::= "split" "{" [Branch] "}" ;
 PrimOp.   Exp6  ::= "primitive" String;
+Import.   Exp6 ::= "import" AIdent ;
 coercions Exp 6 ;
 
 separator Exp "," ;
