@@ -4,6 +4,10 @@ import Lists
 import Props
 import Reals
 
+open Lists
+open Props
+open Reals
+
 Ind : Type
 Ind = primitive "#Ind"
 

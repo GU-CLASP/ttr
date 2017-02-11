@@ -6,9 +6,8 @@ import Data.Monoid
 import Data.Dynamic
 import Pretty (D)
 type CheckedDecls = (TDecls Val,[Val],VTele)
-type Recordoid = ([Val],VTele)
 data ModuleState
-  = Loaded {resolvedDecls :: Recordoid}
+  = Loaded {moduleValue, moduleType :: Val}
   | Loading
   | Failed D
 

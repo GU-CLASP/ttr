@@ -14,6 +14,7 @@ import Data.String
 import Pretty
 import TT
 import Eval
+type Recordoid = ([Val],VTele)
 
 -- Type checking monad
 type Typing a = ReaderT TEnv (ExceptT D IO) a
@@ -55,9 +56,9 @@ addTeleVal (VBind x a rest) lenv = addTypeVal (x,a) (addTeleVal (rest (mkVar (in
 
 -- | Add a bunch of (already checked) declarations to the environment.
 addDecls :: Recordoid -> TEnv -> TEnv
-addDecls ([],VEmpty) tenv = tenv
-addDecls ((v:vs),VBind x a bs) (TEnv k rho gam ex verb) =
-  addDecls (vs,bs v) (TEnv k (Pair rho (x,v)) ((x,a):gam) ex verb)
+addDecls ([],VEmpty) = id
+addDecls ((v:vs),VBind x a bs) = addDecls (vs,bs v) . addDecl x v a
+addDecl x v a (TEnv k rho gam ex verb) = (TEnv k (Pair rho (x,v)) ((x,a):gam) ex verb)
 
 trace :: String -> Typing ()
 trace s = do
@@ -67,16 +68,27 @@ trace s = do
 runTyping :: TEnv -> Typing a -> IO (Either D a)
 runTyping env t = runExceptT $ runReaderT t env
 
-checkModule :: Modules -> TEnv -> [String] -> [TDecls ()] -> IO (Either D Recordoid)
-checkModule _ tenv [] dcls = runDecls tenv dcls
+checkModule :: Modules -> TEnv -> [String] -> [TDecls ()] -> IO ModuleState
+checkModule _ tenv [] dcls = runModule tenv dcls
 checkModule ms tenv (i:is) dcls = do
   case lookup i ms of
-    Nothing -> return $ Left $ sep ["unknow module:", fromString i]
-    Just (Loaded dss) -> do
-      checkModule ms (addDecls dss tenv) is dcls
+    Nothing -> return $ Failed $ sep ["unknow module:", fromString i]
+    Just (Failed d) -> return $ Failed $ sep ["failed dependency: " <> fromString i,d]
+    Just (Loaded val typ) -> do
+      checkModule ms (addDecl (i,Loc "<import>" (0,0)) val typ tenv) is dcls
 
-runDecls :: TEnv -> [TDecls ()] -> IO (Either D Recordoid)
-runDecls tenv d = runTyping tenv ( snd <$> checkDeclss d)
+mconcatRecordoids rs = (mconcat valss, mconcat teles)
+  where (valss,teles) = unzip rs
+  
+runModule :: TEnv -> [TDecls ()] -> IO ModuleState
+runModule tenv d =
+  do m0 <- runTyping tenv (checkDeclss d)
+     return $ case m0 of
+       Left err -> Failed err
+       Right dss -> do
+         let (vals,tele) = mconcatRecordoids [r | (Mutual _,r) <- dss]
+         -- note: do not re-rexport "opens"
+         Loaded (VRecord (zip (map fst $ teleBinders tele) vals)) (VRecordT tele)
 
 
 runInfer :: TEnv -> Ter -> IO (Either D (CTer,Val))
@@ -112,12 +124,11 @@ checkDecls (Mutual d) = do
   let d' = zipWith (\(b,ty) t -> (b,ty,t)) tele' ters'
   return (Mutual d',(map (eval (PDef (zip (map fst tele) ters') e)) ters', vtele)) -- allowing recursive definitions
 
-checkDeclss :: [TDecls ()] -> Typing ([TDecls Val],Recordoid)
-checkDeclss [] = return ([],([],VEmpty))
+checkDeclss :: [TDecls ()] -> Typing [(TDecls Val,Recordoid)]
+checkDeclss [] = return []
 checkDeclss (ds:dss) = do
-  (ds',(vs,tele)) <- checkDecls ds
-  (dss',(vss,teles)) <- local (addDecls (vs,tele)) (checkDeclss dss)
-  return (ds':dss',(vs<>vss,tele<>teles))
+  r@(_,(vs,tele)) <- checkDecls ds
+  (r:) <$> local (addDecls (vs,tele)) (checkDeclss dss)
 
 checkTele :: Tele () -> Typing (Tele Val)
 checkTele []          = return []
@@ -154,8 +165,8 @@ check a t = case (a,t) of
                    check v t `catchError` \e2 ->
                    throwError $ sep [e1,"AND",e2]
   (_,Where e d) -> do
-    (dd,d') <- checkDeclss d
-    e' <- local (addDecls d') $ check a e
+    (dd,d') <- unzip <$> checkDeclss d
+    e' <- local (addDecls (mconcatRecordoids d')) $ check a e
     return $ Where e' dd
   (_,Undef x) -> return (Undef x)
   _ -> do
@@ -243,8 +254,8 @@ checkInfer e = case e of
     u' <- checkType u
     return (Join t' u', VU)
   Where t d -> do
-    (_,d') <- checkDeclss d
-    local (addDecls d') $ checkInfer t
+    (_,d') <- unzip <$> checkDeclss d
+    local (addDecls (mconcatRecordoids d')) $ checkInfer t
   _ -> oops ("checkInfer " <> pretty e)
 
 checkInferProj :: String -> {- ^ field to project-} Val -> {- ^ record value-} VTele -> {- ^ record type-} Typing Val

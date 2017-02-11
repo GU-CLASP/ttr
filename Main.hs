@@ -86,11 +86,11 @@ initLoop flags f = do
     C.Failed err -> do
       putStrLn $ render $ sep ["Loading failed:",err]
       runInputT (settings []) (loop flags f TC.verboseEnv)
-    C.Loaded (avals,atele) -> do
+    C.Loaded v (C.VRecordT atele) -> do
       putStrLn "File loaded."
       -- Compute names for auto completion
       runInputT (settings [n | (n,_) <- C.teleBinders atele])
-         (loop flags f (TC.addDecls (avals,atele) TC.verboseEnv))
+         (loop flags f (TC.addDecls (E.etaExpandRecord atele v,atele) TC.verboseEnv))
 
 -- The main loop
 loop :: [Flag] -> FilePath -> TC.TEnv -> Interpreter ()
@@ -129,7 +129,7 @@ load prefix f = do
   (ms::C.Modules) <- get :: StateT C.Modules IO C.Modules
   case lookup f ms of
     Just C.Loading -> return $ C.Failed "cycle in imports"
-    Just r@(C.Loaded _) -> return r
+    Just r@(C.Loaded _ _) -> return r
     Nothing -> do
       let fname = (prefix FP.</> f <.> "tt")
       b <- liftIO $ doesFileExist fname
@@ -148,13 +148,9 @@ load prefix f = do
                 case runResolver f (resolveModule m) of
                   Left err -> return $ C.Failed $ sep ["Resolver error:", err]
                   Right decls -> do
-                    merr <- liftIO $ TC.checkModule ms' TC.verboseEnv imps decls
-                    case merr of
-                      Left d -> return $ C.Failed $ sep ["Type-checking failed: ",d]
-                      Right cdecls -> do
-                          let res = C.Loaded cdecls
-                          modify ((f,res):)
-                          return res
+                    res <- liftIO $ TC.checkModule ms' TC.verboseEnv imps decls
+                    modify ((f,res):)
+                    return res
 
 
 help :: String

@@ -2,6 +2,9 @@ module where
 import Lists
 import Props
 
+open Lists
+open Props
+
 Real : Type
 Real = primitive "#R"
 
