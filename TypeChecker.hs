@@ -2,6 +2,7 @@
 {-# LANGUAGE PatternSynonyms, FlexibleContexts, RecordWildCards, OverloadedStrings, TypeSynonymInstances, TupleSections#-}
 module TypeChecker where
 
+import Prelude hiding (pi)
 import Data.Function
 import Data.Either (either)
 import Data.List
@@ -15,6 +16,7 @@ import Data.String
 import Pretty
 import TT
 import Eval
+import System.IO.Unsafe
 type Recordoid = ([Val],VTele)
 
 -- Type checking monad
@@ -204,6 +206,9 @@ checkType t = do
    VU -> return t'
    _ -> oops $ sep ["expected a type, but got", pretty t, "which as type",pretty a]
 
+unsafeInfer :: TEnv -> Ter -> Val
+unsafeInfer e t = case unsafePerformIO (runInfer e t) of
+  Right (_,v) -> v
 
 -- | Infer the type of the argument
 checkInfer :: Ter -> Typing (CTer,Val)
@@ -211,8 +216,8 @@ checkInfer e = case e of
   Lam b@(x,_) (Just a) t -> do
     (aa,a') <- checkTypeEval a
     (tt,_) <- local (addTypeVal (b,a')) (checkInfer t)
-    ρ <- asks env
-    return (Lam b (Just aa) tt, eval ρ (Pi x aa (Lam b Nothing tt)))
+    g <- ask
+    return (Lam b (Just aa) tt, pi x a' (\v -> unsafeInfer (addDecl b v a' g) t))
   Import i () -> do
     ms <- asks modules
     case lookup i ms of
