@@ -19,9 +19,9 @@ separator   Decl ";" ;
 Where.    ExpWhere ::= Exp "where" "{" [Decl] "}" ;
 NoWhere.  ExpWhere ::= Exp ;
 
-Module.   Exp  ::= "module" "{" [Decl] "}" ;
 Let.      Exp  ::= "let"  "{" [Decl] "}" "in" Exp ;
 Lam.      Exp1 ::= "\\" AIdent [AIdent] "->" Exp1 ;
+TLam.     Exp1 ::= "\\" "(" PseudoTDecl  ")" "->" Exp1 ;
 Fun.      Exp1 ::= Exp2 "->" Exp1 ;
 Pi.       Exp1 ::= "(" PseudoTDecl ")" "->" Exp1 ;
 Or.       Exp2 ::= Exp2 "\\/" Exp2;
@@ -29,14 +29,15 @@ And.      Exp3 ::= Exp3 "/\\" Exp3;
 App.      Exp4 ::= Exp4 Exp5 ;
 Proj.     Exp5 ::= Exp5 "." AIdent ;
 Con.      Exp6 ::= "'" AIdent Exp6;
+Module.   Exp6 ::= "module" "{" [Decl] "}" ;
 Tuple.    Exp6 ::= "(" [Fld] ")" ;
 Record.   Exp6 ::= "[" [PseudoTDecl] "]"  ;
 Sum.      Exp6 ::= "{" [Label] "}";
 Var.      Exp6 ::= AIdent ;
 U.        Exp6 ::= "Type" ;
 Real.     Exp6 ::= Double ;
-Split.    Exp6  ::= "split" "{" [Branch] "}" ;
-PrimOp.   Exp6  ::= "primitive" String;
+Split.    Exp6 ::= "split" "{" [Branch] "}" ;
+PrimOp.   Exp6 ::= "primitive" String;
 Import.   Exp6 ::= "import" AIdent ;
 coercions Exp 6 ;
 

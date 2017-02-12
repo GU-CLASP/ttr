@@ -40,7 +40,7 @@ eval e (App r s)       = app (eval e r) (eval e s)
 eval e (Var i)         = snd (look i e)
 eval e (Pi nm a b)     = VPi nm (eval e a) (eval e b)
 -- eval e (Lam x t)    = Ter (Lam x t) e -- stop at lambdas
-eval e (Lam x t)       = VLam (fst x) $ \x' -> eval (Pair e (x,x')) t
+eval e (Lam x _ t)       = VLam (fst x) $ \x' -> eval (Pair e (x,x')) t
 eval e (RecordT bs)      = VRecordT $ evalTele e bs
 eval e (Record fs)     = VRecord [(l,eval e x) | (l,x) <- fs]
 eval e (Proj l a)        = projVal l (eval e a)
@@ -219,13 +219,13 @@ conv k (VLam _ f) g = do
 conv k f (VLam _ g) = do
   let v = mkVar k
   conv (k+1) (app f v) (g v)
-conv k (Ter (Lam x u) e) (Ter (Lam x' u') e') = do
+conv k (Ter (Lam x _ u) e) (Ter (Lam x' _ u') e') = do
   let v = mkVar k
   conv (k+1) (eval (Pair e (x,v)) u) (eval (Pair e' (x',v)) u')
-conv k (Ter (Lam x u) e) u' = do
+conv k (Ter (Lam x _ u) e) u' = do
   let v = mkVar k
   conv (k+1) (eval (Pair e (x,v)) u) (app u' v)
-conv k u' (Ter (Lam x u) e) = do
+conv k u' (Ter (Lam x _ u) e) = do
   let v = mkVar k
   conv (k+1) (app u' v) (eval (Pair e (x,v)) u)
 conv k (Ter (Split p _) e) (Ter (Split p' _) e') =
@@ -376,10 +376,10 @@ showTer ctx ρ t0 = case t0 of
    (Meet e0 e1)  -> pp 2 $ \p -> p e0 <+> "/\\" <+> p e1
    (Join e0 e1)  -> pp 2 $ \p -> p e0 <+> "\\/" <+> p e1
    (App e0 e1)   -> pp 4 $ \p -> p e0 <+> showTer 5 ρ e1
-   (Pi _ a (Lam ("_",_) t)) -> pp 1 $ \p -> (showTer 2 ρ a <+> "->") </> p t
-   (Pi _ a (Lam x t)) -> pp 1 $ \p -> (parens (pretty x <> ":" <> showTer 0 ρ a) <+> "->") </> p t
+   (Pi _ a (Lam ("_",_) _ t)) -> pp 1 $ \p -> (showTer 2 ρ a <+> "->") </> p t
+   (Pi _ a (Lam x _ t)) -> pp 1 $ \p -> (parens (pretty x <> ":" <> showTer 0 ρ a) <+> "->") </> p t
    (Pi _ e0 e1)    -> "Pi" <+> showTersArgs ρ [e0,e1]
-   (Lam (x,_) e) -> pp 2 (\p -> hang 0 ("\\" <> pretty x <+> "->") (p e))
+   (Lam (x,_) _ e) -> pp 2 (\p -> hang 0 ("\\" <> pretty x <+> "->") (p e))
    (Proj l e)    -> pp 5 (\p -> p e <> "." <> pretty l)
    (RecordT ts)  -> encloseSep "[" "]" ";" (showTele ρ ts)
    (Record fs)   -> encloseSep "(" ")" "," [pretty l <> " = " <> showTer 0 ρ e | (l,e) <- fs]
@@ -395,6 +395,7 @@ showTer ctx ρ t0 = case t0 of
        pp opPrec k = prn opPrec (k (showTer opPrec ρ))
        prn opPrec = (if opPrec < ctx then parens else id)
 
+showSplitBranches :: Env -> [Brc a] -> D
 showSplitBranches ρ branches = encloseSep "{" "}" ";"
   [hang 2 (pretty l <+> ((pretty . fst) bnds) <+> "↦") (showTer 0 ρ t)  | (l,(bnds,t)) <- branches]
 

@@ -140,12 +140,17 @@ check a t = case (a,t) of
     if map (fst . fst) cas' == map fst ces'
        then do Split loc <$>
                  (forM (zip ces' cas') $ \((lbl1,(bndr,term)), ((_lbl2,_),typ)) -> do
-                     Lam _ term' <- check (VPi "" (eval nu typ) f) (Lam bndr term)
+                     Lam _ _ term' <- check (VPi "" (eval nu typ) f) (Lam bndr Nothing term)
                      return (lbl1,(bndr,term')))
        else oops "case branches do not match the data type"
-  (VPi _ a f,Lam x t)  -> do
+  (VPi _ a f,Lam x aa t)  -> do
     var <- getFresh
-    Lam x <$> local (addTypeVal (x,a)) (check (app f var) t)
+    (a',aa') <- case aa of
+      Just aaa -> do (aa',a') <- checkTypeEval aaa
+                     checkSub "lam type" a' a
+                     return (a',Just aa')
+      Nothing -> return (a,Nothing)
+    Lam x aa' <$> local (addTypeVal (x,a')) (check (app f var) t)
   (VRecordT ts, Record fs) -> do
     Record <$> checkRecord ts fs
   (VMeet w v,_) -> check w t >> check v t
@@ -203,6 +208,11 @@ checkType t = do
 -- | Infer the type of the argument
 checkInfer :: Ter -> Typing (CTer,Val)
 checkInfer e = case e of
+  Lam b@(x,_) (Just a) t -> do
+    (aa,a') <- checkTypeEval a
+    (tt,_) <- local (addTypeVal (b,a')) (checkInfer t)
+    ρ <- asks env
+    return (Lam b (Just aa) tt, eval ρ (Pi x aa (Lam b Nothing tt)))
   Import i () -> do
     ms <- asks modules
     case lookup i ms of
@@ -217,10 +227,10 @@ checkInfer e = case e of
     return (Module (map fst dss),VRecordT tele)
   Real x -> return (Real x, real)
   Prim p -> return (Prim p,lkPrimTy p)
-  Pi x' a (Lam x b) -> do
+  Pi x' a (Lam x _ b) -> do
     (aa,a') <- checkTypeEval a
     b' <- local (addTypeVal (x,a')) $ checkType b
-    return (Pi x' aa (Lam x b' ),VU)
+    return (Pi x' aa (Lam x (Just aa) b' ),VU)
   RecordT [] -> return (RecordT [], VU)
   RecordT ((x,a):as) -> do
     (aa,a') <- checkTypeEval a

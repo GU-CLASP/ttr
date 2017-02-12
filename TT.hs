@@ -64,7 +64,7 @@ type Ter = Ter' ()
 type CTer = Ter' Val
 data Ter' a = App (Ter' a) (Ter' a)
             | Pi String (Ter' a) (Ter' a)
-            | Lam Binder (Ter' a)
+            | Lam Binder (Maybe (Ter' a)) (Ter' a)
             | RecordT (Tele a)
             | Record [(String,(Ter' a))]
             | Proj String (Ter' a)
@@ -86,9 +86,6 @@ data Ter' a = App (Ter' a) (Ter' a)
             | Join (Ter' a) (Ter' a)
 
   deriving (Eq)
-
-mkLams :: [String] -> Ter -> Ter
-mkLams bs t = foldr Lam t [ noLoc b | b <- bs ]
 
 --------------------------------------------------------------------------------
 -- | Values

@@ -85,13 +85,15 @@ resolveVar (AIdent (l,x))
   | otherwise = return $ C.Var x
 
 lam :: AIdent -> Resolver Ter -> Resolver Ter
-lam a e = do x <- resolveBinder a; C.Lam x <$> e
+lam a e = do x <- resolveBinder a; C.Lam x Nothing <$> e
 
 lams :: [AIdent] -> Resolver Ter -> Resolver Ter
 lams = flip $ foldr lam
 
 bind :: (String -> Ter -> Ter -> Ter) -> (AIdent, Exp) -> Resolver Ter -> Resolver Ter
-bind f (x@(AIdent(_,nm)),t) e = f nm <$> resolveExp t <*> lam x e
+bind f (x@(AIdent(_,nm)),t) e = do
+  t' <- resolveExp t
+  f nm t' <$> (C.Lam <$> resolveBinder x <*> pure (Just t') <*> e)
 
 binds :: (String -> Ter -> Ter -> Ter) -> Tele -> Resolver Ter -> Resolver Ter
 binds f = flip $ foldr $ bind f
@@ -107,10 +109,13 @@ resolveExp (Record t)  = case pseudoTele t of
   Nothing   -> throwError "Telescope malformed in Sigma"
 resolveExp (Pi t b)     =  case pseudoTele [t] of
   Just tele -> binds C.Pi tele (resolveExp b)
-  Nothing   -> throwError "Telescope malformed in Pigma"
+  Nothing   -> throwError "Telescope malformed in Pi"
 resolveExp (Fun a b)    = bind C.Pi (AIdent ((0,0),"_"), a) (resolveExp b)
 resolveExp (Lam x xs t) = do
   lams (x:xs) (resolveExp t)
+resolveExp (TLam t u) = case pseudoTele [t] of
+  Just tele -> binds (\_ _ -> id) tele (resolveExp u)
+  Nothing -> throwError "Telescope malformed in Lambda"
 resolveExp (Proj t (AIdent (_,field))) = C.Proj field <$> resolveExp t
 resolveExp (Tuple fs) = C.Record <$> mapM (\(Field (AIdent (_,f)) t0) -> (f,) <$> resolveExp t0) fs
 resolveExp (Split brs)  = do
