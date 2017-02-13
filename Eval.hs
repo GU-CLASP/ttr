@@ -305,15 +305,16 @@ showVal ctx t0 = case t0 of
   (VJoin u v)  -> pp 2 (\p -> p u <+> "\\/" <+> p v)
   (VMeet u v)  -> pp 3 (\p -> p u <+> "/\\" <+> p v)
   (Ter t env)  -> showTer ctx env t
-  (VCon c us)  -> prn 4 ("`" <> pretty c <+> showVal 5 us)
+  (VCon c us)  -> prn 4 (hang 2 ("`" <> pretty c) (showVal 5 us))
   (VPi nm a f) -> pp 1 $ \p ->
      if dependent f then withVar nm $ \v -> (parens (pretty v <> ":" <> pretty a) <+> "->") </> p (f `app` (VVar v))
      else (showVal 2 a  <+> "->") </> p (f `app` (VVar "_"))
-  (VApp u v)   -> pp 4 (\p -> hang 2 (p u) (showVal 5 v))
+  (VApp _ _)   -> pp 4 (\p -> hang 2 (p u) (showArgs vs))
+     where (u:vs) = fnArgs t0
   (VSplit (Ter (Split _ branches) env) v) -> hang 2 ("case" <+> pretty v <+> "of") (showSplitBranches env branches)
   (VVar x)     -> pretty x
   (VRecordT tele) -> pretty tele
-  (VRecord fs)   -> tupled [pretty l <+> "=" <+> pretty e | (l,e) <- fs]
+  (VRecord fs)   -> tupled [hang 2 (pretty l <> " =") (pretty e) | (l,e) <- fs]
   (VProj f u)     -> pp 5 (\p -> p u <> "." <> pretty f)
   (VLam nm f)  -> pp 1 $ \p -> withVar nm $ \v ->
     hang 0 ("\\" <> pretty v <+> "->") (p (f $ VVar v))
@@ -322,6 +323,9 @@ showVal ctx t0 = case t0 of
  where pp :: Int -> ((Val -> D) -> D) -> D
        pp opPrec k = prn opPrec (k (showVal opPrec))
        prn opPrec = (if opPrec < ctx then parens else id)
+
+fnArgs (VApp u v) = fnArgs u ++ [v]
+fnArgs x = [x]
 
 occursIn :: forall v. Value v => String -> v -> Bool
 x `occursIn` a = x `elem` unknowns a
@@ -353,13 +357,13 @@ instance Pretty VTele where
   pretty = encloseSep "[" "]" ";" . prettyTele
 
 instance Pretty Env where
-  pretty e = encloseSep "[" "]" ";" $ reverse (showEnv e)
+  pretty e = encloseSep "[" "]" ";" (showEnv e)
 
 showEnv :: Env -> [D]
 showEnv e0 = case e0 of
     Empty            -> []
     (PDef _xas env)   -> showEnv env
-    (Pair env ((x,_),u)) -> (pretty x <> "=" <> pretty u) : showEnv env
+    (Pair env ((x,_),u)) -> (hang 2 (pretty x <> "=") (pretty u)) : showEnv env
 
 instance Pretty (Ter' a) where
   pretty = showTer 0 Empty
@@ -375,25 +379,29 @@ showTer ctx ρ t0 = case t0 of
    U             -> "U"
    (Meet e0 e1)  -> pp 2 $ \p -> p e0 <+> "/\\" <+> p e1
    (Join e0 e1)  -> pp 2 $ \p -> p e0 <+> "\\/" <+> p e1
-   (App e0 e1)   -> pp 4 $ \p -> p e0 <+> showTer 5 ρ e1
+   (App _ _)   -> pp 4 $ \p -> p e0 <+> showTersArgs ρ es
+     where (e0:es) = fnArgsTer t0
    (Pi _ a (Lam ("_",_) _ t)) -> pp 1 $ \p -> (showTer 2 ρ a <+> "->") </> p t
    (Pi _ a (Lam x _ t)) -> pp 1 $ \p -> (parens (pretty x <> ":" <> showTer 0 ρ a) <+> "->") </> p t
    (Pi _ e0 e1)    -> "Pi" <+> showTersArgs ρ [e0,e1]
    (Lam (x,_) _ e) -> pp 2 (\p -> hang 0 ("\\" <> pretty x <+> "->") (p e))
    (Proj l e)    -> pp 5 (\p -> p e <> "." <> pretty l)
    (RecordT ts)  -> encloseSep "[" "]" ";" (showTele ρ ts)
-   (Record fs)   -> encloseSep "(" ")" "," [pretty l <> " = " <> showTer 0 ρ e | (l,e) <- fs]
+   (Record fs)   -> encloseSep "(" ")" "," [hang 2 (pretty l <> " =") (showTer 0 ρ e) | (l,e) <- fs]
    (Where e d)   -> pp 0 (\p -> hang 2 (p e) (hang 2 "where" (vcat $ map (showDecls ρ) d)))
    (Var x)       -> prettyLook x ρ
-   (Con c es)    -> "`" <> pretty c <+> showTer 5 ρ es
+   (Con c es)    -> hang 2 ("`" <> pretty c) (showTer 5 ρ es)
    (Split _l branches)   -> hang 2 "split" (showSplitBranches ρ branches)
-   (Sum _l branches) -> encloseSep "{" "}" "| " (map (showBranch ρ) branches)
+   (Sum _l branches) -> encloseSep "{" "}" "|" (map (showBranch ρ) branches)
    (Undef _)     -> "undefined (1)"
    (Real r)      -> showy r
    (Prim n)      -> showy n
  where pp :: Int -> ((Ter' a -> D) -> D) -> D
        pp opPrec k = prn opPrec (k (showTer opPrec ρ))
        prn opPrec = (if opPrec < ctx then parens else id)
+
+fnArgsTer (App u v) = fnArgsTer u ++ [v]
+fnArgsTer x = [x]
 
 showSplitBranches :: Env -> [Brc a] -> D
 showSplitBranches ρ branches = encloseSep "{" "}" ";"
@@ -406,7 +414,7 @@ instance Pretty Loc where
   pretty (Loc x l) = pretty x <> "@" <> pretty l
 
 showTersArgs :: Env -> [Ter' a] -> D
-showTersArgs ρ = hcat . map (showTer 5 ρ)
+showTersArgs ρ = sep . map (showTer 5 ρ)
 
 showDecl :: Pretty a => Env -> (a, Ter' b, Ter' b) -> D
 showDecl ρ (b,typ,ter) = vcat [pretty b <+> ":" <+> showTer 0 ρ typ,
