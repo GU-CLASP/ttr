@@ -67,7 +67,7 @@ main = do
       | otherwise -> case files of
        []  -> do
          putStrLn welcome
-         runInputT (settings []) (loop flags [] (TC.verboseEnv []))
+         runInputT (settings []) (loop flags [] (TC.emptyEnv []))
        [f] -> do
          putStrLn welcome
          putStrLn $ "Loading " ++ show f
@@ -82,7 +82,7 @@ initLoop :: [Flag] -> FilePath -> IO ()
 initLoop flags f = do
   -- Parse and type-check files
   (res,ms) <- runStateT (load (dropFileName f) (dropExtension (takeFileName f))) []
-  let k ns e = runInputT (settings ns) (loop flags f (e (TC.verboseEnv ms)))
+  let k ns e = runInputT (settings ns) (loop flags f (e (TC.emptyEnv ms)))
   case res of
     C.Failed err -> do
       putStrLn $ render $ sep ["Loading failed:",err]
@@ -103,7 +103,7 @@ go _ t k = do putStrLn $ "Module does not have a record type, but instead:\n" ++
 
 -- The main loop
 loop :: [Flag] -> FilePath -> TC.TEnv -> Interpreter ()
-loop flags f tenv@(TC.TEnv _ rho _ _ _ ms) = do
+loop flags f tenv@(TC.TEnv _ rho _ _ _ms) = do
   input <- getInputLine prompt
   case input of
     Nothing    -> outputStrLn help >> loop flags f tenv
@@ -123,7 +123,8 @@ loop flags f tenv@(TC.TEnv _ rho _ _ _ ms) = do
           Left  err  -> do outputStrLn (render ("Resolver failed:" </> err))
                            loop flags f tenv
           Right (body,(),_imports_ignored_here) -> do
-          x <- liftIO $ TC.runInfer tenv body
+          let (x,msgs) = TC.runInfer tenv body
+          forM_ msgs $ outputStrLn . render
           case x of
             Left err -> do outputStrLn (render ("Could not type-check:" </> err))
                            loop flags f tenv
@@ -156,7 +157,9 @@ load prefix f = do
                   Right (t,_,imps) -> do
                     forM_ imps (load prefix)
                     ms' <- get
-                    liftIO $ TC.runModule (TC.verboseEnv ms') t
+                    let (x,msgs) = TC.runModule (TC.emptyEnv ms') t
+                    liftIO $ forM_ msgs $ putStrLn . render
+                    return x
       modify ((f,res):)
       return res
 

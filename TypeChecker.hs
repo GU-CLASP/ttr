@@ -1,5 +1,5 @@
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE PatternSynonyms, FlexibleContexts, RecordWildCards, OverloadedStrings, TypeSynonymInstances, TupleSections#-}
+{-# LANGUAGE GeneralizedNewtypeDeriving, PatternSynonyms, FlexibleContexts, RecordWildCards, OverloadedStrings, TypeSynonymInstances, TupleSections#-}
 module TypeChecker where
 
 import Prelude hiding (pi)
@@ -8,27 +8,28 @@ import Data.Either (either)
 import Data.List
 import Data.Monoid hiding (Sum)
 import Control.Monad
-import Control.Monad.Trans
-import Control.Monad.Trans.Except
-import Control.Monad.Trans.Reader
 import Control.Monad.Except
+import Control.Monad.Writer hiding (Sum)
+import Control.Monad.Reader
 import Data.String
 import Pretty
 import TT
 import Eval
-import System.IO.Unsafe
 type Recordoid = ([Val],VTele)
 
--- Type checking monad
-type Typing a = ReaderT TEnv (ExceptT D IO) a
+-- | Type checking monad
+newtype Typing a = Typing (
+  (ReaderT TEnv) -- the module being type-checked and its type (in normal form)
+  ((ExceptT D) -- term is used for position information
+  (Writer [D])) a)
+ deriving (Functor, Applicative, Monad, MonadReader TEnv, MonadError D, MonadWriter [D])
+
 
 -- Environment for type checker
 data TEnv = TEnv { index   :: Int   -- for de Bruijn levels
                  , env     :: Env
                  , ctxt    :: Ctxt
                  , errCtx  :: [D]
-                 , verbose :: Bool  -- Should it be verbose and print
-                                    -- what it typechecks?
                  , modules :: Modules
                  }
 
@@ -41,18 +42,17 @@ logg x = local (\e -> e {errCtx = x:errCtx e})
 oops :: D -> Typing a
 oops msg = do
   TEnv {..} <- ask
-  throwError $ sep ["In: " <+> sep (map ((<> ":")) (reverse errCtx)),
-                     msg,
-                     "in environment" <> pretty env,
-                     "in context" <+> pretty ctxt]
+  throwError $ sep [msg,
+                    hang 2 "when:" (sep (map ((<> ":")) (reverse errCtx))),
+                    hang 2 "in environment" (pretty env),
+                    hang 2 "in context" (pretty ctxt)]
 
-verboseEnv, silentEnv :: Modules -> TEnv
-verboseEnv = TEnv 0 Empty [] [] True
-silentEnv  = TEnv 0 Empty [] [] False
+emptyEnv :: Modules -> TEnv
+emptyEnv  = TEnv 0 Empty [] []
 
 addTypeVal :: (Binder, Val) -> TEnv -> TEnv
-addTypeVal p@(x,_) (TEnv k rho gam ex v ms) =
-  TEnv (k+1) (Pair rho (x,mkVar k)) (p:gam) ex v ms
+addTypeVal p@(x,_) (TEnv k rho gam ex ms) =
+  TEnv (k+1) (Pair rho (x,mkVar k)) (p:gam) ex ms
 
 addTeleVal :: VTele -> TEnv -> TEnv
 addTeleVal VEmpty lenv = lenv
@@ -62,23 +62,22 @@ addTeleVal (VBind x a rest) lenv = addTypeVal (x,a) (addTeleVal (rest (mkVar (in
 addDecls :: Recordoid -> TEnv -> TEnv
 addDecls ([],VEmpty) = id
 addDecls ((v:vs),VBind x a bs) = addDecls (vs,bs v) . addDecl x v a
-addDecl x v a (TEnv k rho gam ex verb ms) = (TEnv k (Pair rho (x,v)) ((x,a):gam) ex verb) ms
+addDecl x v a (TEnv k rho gam ex ms) = (TEnv k (Pair rho (x,v)) ((x,a):gam) ex) ms
 
-trace :: String -> Typing ()
-trace s = do
-  b <- verbose <$> ask
-  when b $ liftIO (putStrLn s)
+trace :: D -> Typing ()
+trace s = tell [s]
 
-runTyping :: TEnv -> Typing a -> IO (Either D a)
-runTyping env t = runExceptT $ runReaderT t env
+runTyping :: TEnv -> Typing a -> (Either D a,[D])
+runTyping env (Typing t) = runWriter $ runExceptT $ runReaderT t env
 
 mconcatRecordoids rs = (mconcat valss, mconcat teles)
   where (valss,teles) = unzip rs
 
-runModule :: TEnv -> Ter -> IO ModuleState
-runModule tenv e = either Failed (uncurry Loaded) <$> runInfer tenv e
+runModule :: TEnv -> Ter -> (ModuleState,[D])
+runModule tenv e = first (either Failed (uncurry Loaded)) (runInfer tenv e)
+  where first f (x,y) = (f x,y)
 
-runInfer :: TEnv -> Ter -> IO (Either D (Val,Val))
+runInfer :: TEnv -> Ter -> (Either D (Val,Val),[D])
 runInfer lenv t = runTyping lenv $ do
   (t',a) <- checkInfer t
   e <- asks env
@@ -106,7 +105,7 @@ checkDecls (Open () r) = do
     _ -> oops $ "attempt to open something which is not a record"
 checkDecls (Mutual d) = do
   let (idents, tele, ters) = (declIdents d, declTele d, declTers d)
-  trace ("Checking: " ++ unwords idents)
+  trace (sep ["Checking: ", sep (map fromString idents)])
   tele' <- checkTele tele
   e <- asks env
   let vtele = evalTele e tele'
@@ -207,8 +206,8 @@ checkType t = do
    _ -> oops $ sep ["expected a type, but got", pretty t, "which as type",pretty a]
 
 unsafeInfer :: TEnv -> Ter -> Val
-unsafeInfer e t = case unsafePerformIO (runInfer e t) of
-  Right (_,v) -> v
+unsafeInfer e t = case (runInfer e t) of
+  (Right (_,v),_) -> v
 
 -- | Infer the type of the argument
 checkInfer :: Ter -> Typing (CTer,Val)
