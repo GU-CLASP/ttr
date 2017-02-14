@@ -1,11 +1,9 @@
-module
+\(params : [Ind : Type]) -> module
 
 open import Lists
 open import Props
 open import Reals
-
-Ind : Type
-Ind = primitive "#Ind"
+open params
 
 kappa : [w : List Real;
          t : Real;
