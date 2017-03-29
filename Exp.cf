@@ -23,6 +23,7 @@ Let.      Exp  ::= "let"  "{" [Decl] "}" "in" Exp ;
 Lam.      Exp1 ::= "\\" AIdent [AIdent] "->" Exp1 ;
 TLam.     Exp1 ::= "\\" "(" PseudoTDecl  ")" "->" Exp1 ;
 Fun.      Exp1 ::= Exp2 "->" Exp1 ;
+LFun.     Exp1 ::= Exp2 "-o" Exp1 ;
 Pi.       Exp1 ::= "(" PseudoTDecl ")" "->" Exp1 ;
 Or.       Exp2 ::= Exp2 "\\/" Exp2;
 And.      Exp3 ::= Exp3 "/\\" Exp3;

@@ -94,7 +94,7 @@ initLoop flags f = do
 go :: C.Val -> C.Val -> ([C.Ident] -> (TC.TEnv -> TC.TEnv) -> IO b) -> IO b
 go v (C.VRecordT atele) k = k [n | (n,_) <- C.teleBinders atele]
                               (TC.addDecls (E.etaExpandRecord atele v,atele))
-go v (C.VPi x a b) k = do
+go v (C.VPi x _rig _a b) k = do
   putStrLn $ "Parametric module: entering with abtract parameters"
   go (E.app v (C.VVar x)) (E.app b (C.VVar x)) k
 go _ t k = do putStrLn $ "Module does not have a record type, but instead:\n" ++ show t

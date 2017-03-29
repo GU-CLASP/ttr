@@ -1,6 +1,8 @@
 local-packages:
   ttr:
     location: .
+  # pretty-compact:
+  #   location: ../../prettiest/
 
 source-deps:
   pretty-compact:

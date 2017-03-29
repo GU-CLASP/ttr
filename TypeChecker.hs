@@ -1,8 +1,9 @@
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving, PatternSynonyms, FlexibleContexts, RecordWildCards, OverloadedStrings, TypeSynonymInstances, TupleSections#-}
 module TypeChecker where
 
-import Prelude hiding (pi)
+import Prelude hiding (pi, Num(..))
 import Data.Function
 import Data.Either (either)
 import Data.List
@@ -11,19 +12,49 @@ import Control.Monad
 import Control.Monad.Except
 import Control.Monad.Writer hiding (Sum)
 import Control.Monad.Reader
+import Control.Monad.State
 import Data.String
 import Pretty
 import TT
 import Eval
+import qualified Data.Map.Strict as M
+
+import Algebra.Classes hiding (Sum(..))
+
 type Recordoid = ([Val],VTele)
+type Usages = M.Map Binder Rig
 
 -- | Type checking monad
 newtype Typing a = Typing (
-  (ReaderT TEnv) -- the module being type-checked and its type (in normal form)
-  ((ExceptT D) -- term is used for position information
-  (Writer [D])) a)
- deriving (Functor, Applicative, Monad, MonadReader TEnv, MonadError D, MonadWriter [D])
+  (StateT Usages)
+  ((ReaderT TEnv)
+  ((ExceptT D)
+  (Writer [D]))) a)
+ deriving (Functor, Applicative, Monad, MonadReader TEnv, MonadError D, MonadWriter [D], MonadState Usages)
 
+-- | Scale the argument usages
+relax :: Rig -> Typing a -> Typing a
+relax f t = do
+  r0 <- get
+  put zero
+  x <- t
+  r1 <- get
+  put (r0 + fmap (f *) r1)
+  return x
+
+use :: Binder -> Typing ()
+use x = modify (+ M.singleton x one)
+
+checkUsage :: Binder -> Rig -> Typing a -> Typing a
+checkUsage b@(name,loc) br k = do
+  modify (M.insert b zero)
+  x <- k
+  r0 <- get
+  case M.lookup b r0 of
+    Just xr -> unless (xr <= br) $ throwError $ sep ["Usage violation for", pretty name, "declared at", pretty loc, "expected", pretty br, "got", pretty xr ]
+    Nothing -> error $ "panic: variable not found in usage: " <> (show b)
+  modify (M.delete b)
+  return x
 
 -- Environment for type checker
 data TEnv = TEnv { index   :: Int   -- for de Bruijn levels
@@ -50,28 +81,28 @@ oops msg = do
 emptyEnv :: Modules -> TEnv
 emptyEnv  = TEnv 0 Empty [] []
 
+withLocal :: forall a. (Binder, Rig, Val) -> Typing a -> Typing a
+withLocal (x,r,a') t = local (addTypeVal (x,a')) (checkUsage x r t)
+
 addTypeVal :: (Binder, Val) -> TEnv -> TEnv
 addTypeVal p@(x,_) (TEnv k rho gam ex ms) =
   TEnv (k+1) (Pair rho (x,mkVar k)) (p:gam) ex ms
 
 addTeleVal :: VTele -> TEnv -> TEnv
 addTeleVal VEmpty lenv = lenv
-addTeleVal (VBind x a rest) lenv = addTypeVal (x,a) (addTeleVal (rest (mkVar (index lenv))) lenv) 
+addTeleVal (VBind x _r a rest) lenv = addTypeVal (x,a) (addTeleVal (rest (mkVar (index lenv))) lenv) 
 
 -- | Add a bunch of (already checked) declarations to the environment.
 addDecls :: Recordoid -> TEnv -> TEnv
 addDecls ([],VEmpty) = id
-addDecls ((v:vs),VBind x a bs) = addDecls (vs,bs v) . addDecl x v a
+addDecls ((v:vs),VBind x _r a bs) = addDecls (vs,bs v) . addDecl x v a
 addDecl x v a (TEnv k rho gam ex ms) = (TEnv k (Pair rho (x,v)) ((x,a):gam) ex) ms
 
 trace :: D -> Typing ()
 trace s = tell [s]
 
 runTyping :: TEnv -> Typing a -> (Either D a,[D])
-runTyping env (Typing t) = runWriter $ runExceptT $ runReaderT t env
-
-mconcatRecordoids rs = (mconcat valss, mconcat teles)
-  where (valss,teles) = unzip rs
+runTyping env (Typing t) = runWriter $ runExceptT $ runReaderT (fst <$> runStateT t zero) env
 
 runModule :: TEnv -> Ter -> (ModuleState,[D])
 runModule tenv e = first (either Failed (uncurry Loaded)) (runInfer tenv e)
@@ -110,8 +141,10 @@ checkDecls (Mutual d) = do
   e <- asks env
   let vtele = evalTele e tele'
   ters' <- local (addTeleVal vtele) (checks vtele ters)
-  let d' = zipWith (\(b,ty) t -> (b,ty,t)) tele' ters'
-  return (Mutual d',(map (eval (PDef (zip (map fst tele) ters') e)) ters', vtele)) -- allowing recursive definitions
+  let d' = zipWith (\(b,_r,ty) t -> (b,ty,t)) tele' ters'
+  return (Mutual d',(map (eval (PDef (zip (map frst tele) ters') e)) ters', vtele)) -- allowing recursive definitions
+
+frst (x,_,_) = x
 
 checkDeclss :: [TDecls ()] -> Typing [(TDecls Val,Recordoid)]
 checkDeclss [] = return []
@@ -121,9 +154,9 @@ checkDeclss (ds:dss) = do
 
 checkTele :: Tele () -> Typing (Tele Val)
 checkTele []          = return []
-checkTele ((x,a):xas) = do
+checkTele ((x,r,a):xas) = do
   (aa,a') <- checkTypeEval a
-  ((x,aa):) <$> local (addTypeVal (x,a')) (checkTele xas)
+  ((x,r,aa):) <$> local (addTypeVal (x,a')) (checkTele xas)
 
 
 checkLogg :: Val -> Ter -> Typing CTer
@@ -135,23 +168,23 @@ check a t = case (a,t) of
     (b,nu) <- getLblType c a
     Con c <$> check (eval nu b) e
   (VU,Sum loc bs) -> Sum loc <$> forM bs (\(l,a) -> (l,) <$> checkType a)
-  (VPi _ (Ter (Sum _ cas) nu) f,Split loc ces) -> do
+  (VPi x r (Ter (Sum _ cas) nu) f,Split loc ces) -> do
     let cas' = sortBy (compare `on` fst . fst) cas
         ces' = sortBy (compare `on` fst) ces
     if map (fst . fst) cas' == map fst ces'
        then do Split loc <$>
                  (forM (zip ces' cas') $ \((lbl1,(bndr,term)), ((_lbl2,_),typ)) -> do
-                     Lam _ _ term' <- check (VPi "" (eval nu typ) f) (Lam bndr Nothing term)
+                     Lam _ _ term' <- check (VPi x r (eval nu typ) f) (Lam bndr Nothing term)
                      return (lbl1,(bndr,term')))
        else oops "case branches do not match the data type"
-  (VPi _ a f,Lam x aa t)  -> do
+  (VPi _ r a f,Lam x aa t)  -> do
     var <- getFresh
     (a',aa') <- case aa of
       Just aaa -> do (aa',a') <- checkTypeEval aaa
                      checkSub "lam type" a' a
                      return (a',Just aa')
       Nothing -> return (a,Nothing)
-    Lam x aa' <$> local (addTypeVal (x,a')) (check (app f var) t)
+    Lam x aa' <$> withLocal (x,r,a') (check (app f var) t)
   (VRecordT ts, Record fs) -> do
     Record <$> checkRecord ts fs
   (VMeet w v,_) -> check w t >> check v t
@@ -160,7 +193,7 @@ check a t = case (a,t) of
                    throwError $ sep [e1,"AND",e2]
   (_,Where e d) -> do
     (dd,d') <- unzip <$> checkDeclss d
-    e' <- local (addDecls (mconcatRecordoids d')) $ check a e
+    e' <- local (addDecls (mconcat d')) $ check a e
     return $ Where e' dd
   (_,Undef x) -> return (Undef x)
   _ -> do
@@ -172,11 +205,11 @@ check a t = case (a,t) of
 -- | Check that a record has a given type
 checkRecord :: VTele -> [(String,Ter)] -> Typing [(String,CTer)]
 checkRecord VEmpty _ = return [] -- other fields are ignored.
-checkRecord (VBind (x,l) a r) ts =
+checkRecord (VBind (x,l) rig a r) ts =
   case lookup x ts of
     Nothing -> oops $ sep ["type expects field", pretty x, "but it cannot be found in the term."]
     Just t -> do
-      (tt,t') <- checkEval a t
+      (tt,t') <- relax rig (checkEval a t)
       ((x,tt):) <$> checkRecord (r t') ts
 
 checkEval :: Val -> Ter -> Typing (CTer,Val)
@@ -200,7 +233,7 @@ checkSub msg a v = do
 
 checkType :: Ter -> Typing CTer
 checkType t = do
-  (t',a) <- checkInfer t
+  (t',a) <- relax zero (checkInfer t)
   case a of
    VU -> return t'
    _ -> oops $ sep ["expected a type, but got", pretty t, "which as type",pretty a]
@@ -226,35 +259,35 @@ checkInfer e = case e of
         return (Import i val, typ)
   Module dclss -> do
     dss <- checkDeclss dclss
-    let (_vals,tele) = mconcatRecordoids [r | (Mutual _,r) <- dss]
+    let (_vals,tele) = mconcat [r | (Mutual _,r) <- dss]
     -- note: we do not re-rexport "opens"
     return (Module (map fst dss),VRecordT tele)
   Real x -> return (Real x, real)
   Prim p -> return (Prim p,lkPrimTy p)
-  Pi x' a (Lam x _ b) -> do
+  Pi x' rig a (Lam x _ b) -> do
     (aa,a') <- checkTypeEval a
-    b' <- local (addTypeVal (x,a')) $ checkType b
-    return (Pi x' aa (Lam x (Just aa) b' ),VU)
+    b' <- withLocal (x,zero,a') $ checkType b
+    return (Pi x' rig aa (Lam x (Just aa) b' ),VU)
   RecordT [] -> return (RecordT [], VU)
-  RecordT ((x,a):as) -> do
+  RecordT ((x,rig,a):as) -> do
     (aa,a') <- checkTypeEval a
-    RecordT as' <- local (addTypeVal (x,a')) $ checkType (RecordT as)
-    return (RecordT ((x,aa):as'), VU)
+    RecordT as' <- withLocal (x,zero,a') $ checkType (RecordT as)
+    return (RecordT ((x,rig,aa):as'), VU)
   U -> return (U,VU)                 -- U : U
   Var n -> do
     gam <- ctxt <$> ask
-    case getIdent n gam of
-      Just v  -> return (Var n,v)
+    case lookupIdent n gam of
+      Just (b,v)  -> use b >> return (Var n,v)
       Nothing -> oops $ pretty n <> " is not declared"
   App t u -> do
     (t',c) <- checkInfer t
     case c of
-      VPi _ a f -> do
-        (u',v) <- checkEval a u
+      VPi _ r a f -> do
+        (u',v) <- relax r (checkEval a u)
         return $ (App t' u', app f v)
       _       -> oops $ pretty c <> " is not a product"
   Proj l t -> do
-    (t',a) <- checkInfer t
+    (t',a) <- relax (zero :.. one) (checkInfer t)
     e <- asks env
     case a of
       VRecordT rt -> (Proj l t',) <$> checkInferProj l (eval e t') rt
@@ -269,19 +302,19 @@ checkInfer e = case e of
     return (Join t' u', VU)
   Where t d -> do
     (_,d') <- unzip <$> checkDeclss d
-    local (addDecls (mconcatRecordoids d')) $ checkInfer t
+    local (addDecls (mconcat d')) $ checkInfer t
   _ -> oops ("checkInfer " <> pretty e)
 
 checkInferProj :: String -> {- ^ field to project-} Val -> {- ^ record value-} VTele -> {- ^ record type-} Typing Val
 checkInferProj l _ VEmpty = oops $ "field not found:" <> pretty l
-checkInferProj l r (VBind (x,_) a rest)
+checkInferProj l r (VBind (x,_) _rig a rest)
   | x == l = return a
   | otherwise = checkInferProj l r (rest (projVal x r))
 checkInferProj _ _ VBot = error "checkInferProj: VBot escaped from meet"
 
 checks :: VTele -> [Ter] -> Typing [CTer]
 checks _              []     = return []
-checks (VBind _ v xas) (e:es) = do
-  (ee,e') <- checkEval v e
+checks (VBind _ rig v xas) (e:es) = do
+  (ee,e') <- relax rig (checkEval v e)
   (ee:) <$> checks (xas e') es
 checks _              _      = oops "checks"

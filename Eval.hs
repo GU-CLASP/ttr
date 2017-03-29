@@ -5,11 +5,13 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Eval where
 
+import Prelude hiding (Num(..), pi)
 import Pretty
 import TT
 import Data.Monoid hiding (Sum)
 import Data.Dynamic
-import Prelude hiding (pi)
+import Data.Maybe (fromJust)
+import Algebra.Classes hiding (Sum)
 
 -- | Lookup a value in the environment
 look :: Ident -> Env -> (Binder, Val)
@@ -23,7 +25,7 @@ look x Empty = error ("panic: variable not found in env:" ++ show x)
 
 etaExpandRecord :: VTele -> Val -> [Val]
 etaExpandRecord VEmpty _ = []
-etaExpandRecord (VBind (x,_) _ xs) r = let v = projVal x r in v:etaExpandRecord (xs v) r
+etaExpandRecord (VBind (x,_) _rig  _ xs) r = let v = projVal x r in v:etaExpandRecord (xs v) r
 
 evalDecls :: TDecls Val -> Env -> (Env,[(String,Val)])
 evalDecls (Mutual decls) ρ = (ρ',[(x,eval ρ' y) | ((x,_),_,y) <- decls])
@@ -38,7 +40,7 @@ eval :: Env -> CTer -> Val
 eval _ U               = VU
 eval e (App r s)       = app (eval e r) (eval e s)
 eval e (Var i)         = snd (look i e)
-eval e (Pi nm a b)     = VPi nm (eval e a) (eval e b)
+eval e (Pi nm r a b)     = VPi nm r (eval e a) (eval e b)
 -- eval e (Lam x t)    = Ter (Lam x t) e -- stop at lambdas
 eval e (Lam x _ t)       = VLam (fst x) $ \x' -> eval (Pair e (x,x')) t
 eval e (RecordT bs)      = VRecordT $ evalTele e bs
@@ -96,7 +98,7 @@ infixr -->
 (-->) :: Val -> Val -> Val
 a --> b = pi "_" a $ \_ -> b
 pi :: String -> Val -> (Val -> Val) -> Val
-pi nm a f = VPi nm a $ VLam nm f
+pi nm a f = VPi nm free a $ VLam nm f
 lkPrimTy :: String -> Val
 lkPrimTy "-" = real --> real --> real
 lkPrimTy "+" = real --> real --> real
@@ -111,7 +113,7 @@ lkPrimTy p = error ("No type for primitive: " ++ show p)
 
 evalTele :: Env -> Tele Val -> VTele
 evalTele _ [] = VEmpty
-evalTele e (((x,l),t):ts) = VBind (x,l) t' (\x' -> evalTele (Pair e ((x,l),x')) ts)
+evalTele e (((x,l),r,t):ts) = VBind (x,l) r t' (\x' -> evalTele (Pair e ((x,l),x')) ts)
   where t' = eval e t
 
 vJoin :: Val -> Val -> Val
@@ -140,29 +142,28 @@ lacksField l fs = not (hasField l fs)
 botTele :: VTele -> Bool
 botTele VEmpty = False
 botTele VBot = True
-botTele  (VBind _ _ t) = botTele (t (error "botTele: cannot look at values!"))
+botTele  (VBind _ _ _ t) = botTele (t (error "botTele: cannot look at values!"))
 
 -- | the meet of two telescopes
 meetFields :: VTele -> VTele -> VTele
 meetFields VEmpty fs = fs
 meetFields fs VEmpty = fs
-meetFields fs@(VBind (l,ll) a t) fs'@(VBind (l',ll') a' t')
-  | l == l' = VBind (l,ll) (vMeet a a') (\x -> meetFields (t x) (t' x))
-  | lacksField l' fs  = VBind (l',ll') a' (\x -> meetFields fs (t' x))
-  | lacksField l  fs' = VBind (l,ll)  a  (\x -> meetFields fs' (t x))
+meetFields fs@(VBind (l,ll) r a t) fs'@(VBind (l',ll') r' a' t')
+  | l == l' = VBind (l,ll) (r /\ r') (vMeet a a') (\x -> meetFields (t x) (t' x))
+  | lacksField l' fs  = VBind (l',ll') r' a' (\x -> meetFields fs (t' x))
+  | lacksField l  fs' = VBind (l,ll)   r  a  (\x -> meetFields fs' (t x))
   | otherwise = VBot
 meetFields VBot _ = VBot
 meetFields _ VBot = VBot
-
 
 -- | the join of two telescopes
 joinFields :: VTele -> VTele -> VTele
 joinFields VEmpty _ = VEmpty
 joinFields _ VEmpty = VEmpty
-joinFields fs@(VBind (l,ll) a t) fs'@(VBind (l',_ll') a' t')
+joinFields fs@(VBind (l,ll) r a t) fs'@(VBind (l',_ll') r' a' t')
   | "__REMOVE__" `occursIn` a = joinFields (t remove) fs'
   | "__REMOVE__" `occursIn` a' = joinFields fs (t' remove)
-  | l == l' = VBind (l,ll) (vJoin a a') (\x -> joinFields (t x) (t' x))
+  | l == l' = VBind (l,ll) (r \/ r') (vJoin a a') (\x -> joinFields (t x) (t' x))
   | lacksField l' fs  = joinFields fs (t' remove)
   | lacksField l  fs' = joinFields fs' (t remove)
   | otherwise = VBot
@@ -197,12 +198,18 @@ projVal l u | isNeutral u = VProj l u
 convs :: Int -> [Val] -> [Val] -> Maybe D
 convs k a b = mconcat $ zipWith (conv k) a b
 
+satisfy :: forall a. Bool -> a -> Maybe a
+satisfy p err = if p then Nothing else Just err
+
 equal :: (Pretty a, Eq a) => a -> a -> Maybe D
-equal a b | a == b = Nothing
-          | otherwise = different a b
+equal a b = satisfy (a == b) (fromJust $ different a b)
+
+included :: (Pretty a, Ord a) => a -> a -> Maybe D
+included a b = satisfy (a <= b) (sep [pretty a,"⊈",pretty b])
+ 
 
 different :: (Pretty a) => a -> a -> Maybe D
-different a b = Just $ sep [pretty a,"/=",pretty b]
+different a b = Just (sep [pretty a,"≠",pretty b])
 
 noSub :: (Pretty a) => a -> a -> Maybe D
 noSub a b = Just $ sep [pretty a,"not a subtype of",pretty b]
@@ -234,9 +241,9 @@ conv k (Ter (Sum p _) e)   (Ter (Sum p' _) e') =
   (p `equal` p') <> convEnv k e e'
 conv k (Ter (Undef p) e) (Ter (Undef p') e') =
   (p `equal` p') <> convEnv k e e'
-conv k (VPi _ u v) (VPi _ u' v') = do
+conv k (VPi _ r u v) (VPi _ r' u' v') = do
   let w = mkVar k
-  conv k u' u  <> conv (k+1) (app v w) (app v' w)
+  equal r r' <> conv k u' u  <> conv (k+1) (app v w) (app v' w)
 conv k (VRecordT fs) (VRecordT fs') = 
   convTele k fs fs'
 conv k (VProj l u) (VProj l' u') = equal l l' <> conv k u u'
@@ -253,9 +260,9 @@ conv _ x              x'           = different x x'
 -- @sub _ a b@: check that a is a subtype of b.
 sub :: Int -> Val -> Val -> Maybe D
 sub _ VU VU = Nothing
-sub k (VPi _ u v) (VPi _ u' v') = do
+sub k (VPi _ r u v) (VPi _ r' u' v') = do
   let w = mkVar k
-  conv k u' u  <> sub (k+1) (app v w) (app v' w)
+  included r' r <> conv k u' u  <> sub (k+1) (app v w) (app v' w)
 sub k (VRecordT fs) (VRecordT fs') = subTele k fs fs'
 sub k (VJoin a b) c = sub k a c <> sub k b c
 sub k (VMeet a b) c = sub k a c `orElse` sub k b c
@@ -273,18 +280,18 @@ convEnv k e e' = mconcat $ zipWith (conv k) (valOfEnv e) (valOfEnv e')
 
 convTele :: Int -> VTele -> VTele -> Maybe D
 convTele _ VEmpty VEmpty = Nothing
-convTele k (VBind l a t) (VBind l' a' t') = do
+convTele k (VBind l r a t) (VBind l' r' a' t') = do
   let v = mkVar k
-  equal l l' <> conv k a a' <> convTele (k+1) (t v) (t' v)
+  equal r r' <> equal l l' <> conv k a a' <> convTele (k+1) (t v) (t' v)
 convTele _ x x' = different x x'
 
 subTele :: Int -> VTele -> VTele -> Maybe D
 subTele _ _ VEmpty = Nothing  -- all records are a subrecord of the empty record
-subTele k (VBind l a t) (VBind l' a' t') = do
+subTele k (VBind l r a t) (VBind l' r' a' t') = do
   let v = mkVar k
   if l == l'
-    then sub k a a' <> subTele (k+1) (t v) (t' v)
-    else subTele (k+1) (VBind l a t) (t' v)
+    then included r r' <> sub k a a' <> subTele (k+1) (t v) (t' v)
+    else subTele (k+1) (VBind l r a t) (t' v)
 subTele _ x x' = noSub x x'
 -- FIXME: Subtyping of records isn't complete. To be complete, one
 -- would have to create a graph representation of the dependencies in
@@ -306,8 +313,8 @@ showVal ctx t0 = case t0 of
   (VMeet u v)  -> pp 3 (\p -> p u <+> "/\\" <+> p v)
   (Ter t env)  -> showTer ctx env t
   (VCon c us)  -> prn 4 (hang 2 ("`" <> pretty c) (showVal 5 us))
-  (VPi nm a f) -> pp 1 $ \p ->
-     if dependent f then withVar nm $ \v -> (parens (pretty v <> ":" <> pretty a) <+> "->") </> p (f `app` (VVar v))
+  (VPi nm r a f) -> pp 1 $ \p ->
+     if dependent f then withVar nm $ \v -> (parens (pretty v <+> ":" <> pretty r <+> pretty a) <+> "->") </> p (f `app` (VVar v))
      else (showVal 2 a  <+> "->") </> p (f `app` (VVar "_"))
   (VApp _ _)   -> pp 4 (\p -> hang 2 (p u) (showArgs vs))
      where (u:vs) = fnArgs t0
@@ -351,7 +358,7 @@ prettyLook x Empty = pretty x {- typically bound in a Split -}
 
 prettyTele :: VTele -> [D]
 prettyTele VEmpty = []
-prettyTele (VBind (nm,_l) ty rest) = (pretty nm <+> ":" <+> pretty ty) : prettyTele (rest $ VVar nm)
+prettyTele (VBind (nm,_l) r ty rest) = (pretty nm <+> ":"<> pretty r <+> pretty ty) : prettyTele (rest $ VVar nm)
 
 instance Pretty VTele where
   pretty = encloseSep "[" "]" ";" . prettyTele
@@ -370,7 +377,7 @@ instance Pretty (Ter' a) where
 
 showTele :: Env -> Tele a -> [D]
 showTele _ [] = mempty
-showTele ρ (((x,_loc),t):tele) = (pretty x <> " : " <> showTer 0 ρ t) : showTele ρ tele
+showTele ρ (((x,_loc),r,t):tele) = (pretty x <> " :" <> pretty r <+> showTer 0 ρ t) : showTele ρ tele
 
 showTer :: Int -> Env -> Ter' a -> D
 showTer ctx ρ t0 = case t0 of
@@ -381,9 +388,9 @@ showTer ctx ρ t0 = case t0 of
    (Join e0 e1)  -> pp 2 $ \p -> p e0 <+> "\\/" <+> p e1
    (App _ _)   -> pp 4 $ \p -> p e0 <+> showTersArgs ρ es
      where (e0:es) = fnArgsTer t0
-   (Pi _ a (Lam ("_",_) _ t)) -> pp 1 $ \p -> (showTer 2 ρ a <+> "->") </> p t
-   (Pi _ a (Lam x _ t)) -> pp 1 $ \p -> (parens (pretty x <> ":" <> showTer 0 ρ a) <+> "->") </> p t
-   (Pi _ e0 e1)    -> "Pi" <+> showTersArgs ρ [e0,e1]
+   (Pi _ r a (Lam ("_",_) _ t)) -> pp 1 $ \p -> (showTer 2 ρ a <+> "->") </> p t
+   (Pi _ r a (Lam x _ t)) -> pp 1 $ \p -> (parens (pretty x <> ":" <> showTer 0 ρ a) <+> "->") </> p t
+   (Pi _ r e0 e1)    -> "Pi" <+> showTersArgs ρ [e0,e1]
    (Lam (x,_) _ e) -> pp 2 (\p -> hang 0 ("\\" <> pretty x <+> "->") (p e))
    (Proj l e)    -> pp 5 (\p -> p e <> "." <> pretty l)
    (RecordT ts)  -> encloseSep "[" "]" ";" (showTele ρ ts)
@@ -430,7 +437,7 @@ class Value v where
 instance Value Val where
   unknowns v0 = case v0 of
     VU -> []
-    VPi _ x y -> unknowns x ++ unknowns y
+    VPi _binder _rig x  y -> unknowns x ++ unknowns y
     VRecordT x -> unknowns x
     VRecord x -> concatMap (unknowns . snd) x
     VCon _ x -> unknowns x
@@ -452,7 +459,7 @@ instance Value Env where
 
 instance Value VTele where
   unknowns VEmpty = []
-  unknowns (VBind _ x y) = unknowns x ++ unknowns (y (VVar "___UNK___"))
+  unknowns (VBind _binder _rig x y) = unknowns x ++ unknowns (y (VVar "___UNK___"))
   unknowns VBot = []
 
   

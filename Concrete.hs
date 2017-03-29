@@ -5,6 +5,7 @@ module Concrete where
 
 import Exp.Abs
 import qualified TT as C
+import TT (Interval(..), Rig, free)
 import Pretty
 
 import Control.Monad.Trans.RWS
@@ -13,8 +14,9 @@ import Control.Monad.Except (throwError)
 import Control.Monad (when)
 import Data.Functor.Identity
 import Data.List (nub)
+import Algebra.Classes hiding (Sum)
 
-type Tele = [(AIdent,Exp)]
+type Tele = [(AIdent,Rig,Exp)]
 type Ter  = C.Ter
 
 -- | Useful auxiliary functions
@@ -42,7 +44,7 @@ unApps (App u v) ws = unApps u (v : ws)
 unApps u         ws = (u, ws)
 
 vTele :: [VTDecl] -> Tele
-vTele decls = [ (i, typ) | VTDecl ident ids typ <- decls, i <- ident:ids ]
+vTele decls = [ (i, free, typ) | VTDecl ident ids typ <- decls, i <- ident:ids ]
 
 -- turns an expression of the form App (... (App id1 id2) ... idn)
 -- into a list of idents
@@ -54,7 +56,7 @@ pseudoTele []                         = return []
 pseudoTele (PseudoTDecl expr typ : pd) = do
     ids <- pseudoIdents expr
     pt  <- pseudoTele pd
-    return $ map (,typ) ids ++ pt
+    return $ map (,free,typ) ids ++ pt
 
 -------------------------------------------------------------------------------
 -- | Resolver and environment
@@ -90,12 +92,12 @@ lam a e = do x <- resolveBinder a; C.Lam x Nothing <$> e
 lams :: [AIdent] -> Resolver Ter -> Resolver Ter
 lams = flip $ foldr lam
 
-bind :: (String -> Ter -> Ter -> Ter) -> (AIdent, Exp) -> Resolver Ter -> Resolver Ter
-bind f (x@(AIdent(_,nm)),t) e = do
+bind :: (String -> Rig -> Ter -> Ter -> Ter) -> (AIdent, Rig, Exp) -> Resolver Ter -> Resolver Ter
+bind f (x@(AIdent(_,nm)),r,t) e = do
   t' <- resolveExp t
-  f nm t' <$> (C.Lam <$> resolveBinder x <*> pure (Just t') <*> e)
+  f nm r t' <$> (C.Lam <$> resolveBinder x <*> pure (Just t') <*> e)
 
-binds :: (String -> Ter -> Ter -> Ter) -> Tele -> Resolver Ter -> Resolver Ter
+binds :: (String -> Rig -> Ter -> Ter -> Ter) -> Tele -> Resolver Ter -> Resolver Ter
 binds f = flip $ foldr $ bind f
 
 resolveExp :: Exp -> Resolver Ter
@@ -110,11 +112,12 @@ resolveExp (Record t)  = case pseudoTele t of
 resolveExp (Pi t b)     =  case pseudoTele [t] of
   Just tele -> binds C.Pi tele (resolveExp b)
   Nothing   -> throwError "Telescope malformed in Pi"
-resolveExp (Fun a b)    = bind C.Pi (AIdent ((0,0),"_"), a) (resolveExp b)
+resolveExp (Fun a b)    = bind C.Pi (AIdent ((0,0),"_"), free, a) (resolveExp b)
+resolveExp (LFun a b)   = bind C.Pi (AIdent ((0,0),"_"), one, a) (resolveExp b)
 resolveExp (Lam x xs t) = do
   lams (x:xs) (resolveExp t)
 resolveExp (TLam t u) = case pseudoTele [t] of
-  Just tele -> binds (\_ _ -> id) tele (resolveExp u)
+  Just tele -> binds (\_ _ _ -> id) tele (resolveExp u)
   Nothing -> throwError "Telescope malformed in Lambda"
 resolveExp (Proj t (AIdent (_,field))) = C.Proj field <$> resolveExp t
 resolveExp (Tuple fs) = C.Record <$> mapM (\(Field (AIdent (_,f)) t0) -> (f,) <$> resolveExp t0) fs
@@ -145,11 +148,11 @@ resolveBranch (Branch lbl args e) = do
     re      <- resolveWhere e
     return (unAIdent lbl, (binder, re))
 
-resolveTele :: [(AIdent,Exp)] -> Resolver (C.Tele ())
+resolveTele :: [(AIdent,Rig,Exp)] -> Resolver (C.Tele ())
 resolveTele []        = return []
-resolveTele ((i,d):t) = do
+resolveTele ((i,r,d):t) = do
   x <- resolveBinder i
-  ((x,) <$> resolveExp d) <:> (resolveTele t)
+  ((x,r,) <$> resolveExp d) <:> (resolveTele t)
 
 resolveLabel :: Label -> Resolver (C.Binder, C.Ter)
 resolveLabel (Label n x) =
@@ -172,11 +175,11 @@ resolveMutuals decls = do
     when (names /= map fst rddecls) $
       throwError $ "Mismatching names in" <+> showy decls
     rtdecls <- resolveTele tdecls
-    return ([ (x,t,d) | (x,t) <- rtdecls | (_,d) <- rddecls ])
+    return ([ (x,t,d) | (x,r,t) <- rtdecls | (_,d) <- rddecls ])
   where
     idents = [ x | DeclType x _ <- decls ]
     names  = [ unAIdent x | x <- idents ]
-    tdecls = [ (x,t) | DeclType x t <- decls ]
+    tdecls = [ (x,free,t) | DeclType x t <- decls ]
     ddecls = filter (not . isTDecl) decls
     isTDecl d = case d of DeclType{} -> True; _ -> False
 

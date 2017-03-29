@@ -1,0 +1,17 @@
+\(params : let open import Leibniz
+     in [Ind : Type;
+         identify : Ind -o Ind -o Ind
+         ; propIdentify : (x y : Ind) -> Eq Ind (identify x y) x
+         ]) -> module
+
+open params
+open import Leibniz
+
+-- reject : Ind -o Ind
+-- reject x = identify x x
+
+accept : Ind -> Ind
+accept x = identify x x
+
+-- Theorem
+-- Theorem : 

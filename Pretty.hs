@@ -34,6 +34,7 @@ withVar s k = do
 ($$) :: D -> D -> D
 ($$)  = liftM2 (PC.$$)
 
+(</>) :: D -> D -> D
 x </> y  = Pretty.sep [x,y]
 
 infixr 6 <+>

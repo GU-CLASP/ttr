@@ -1,10 +1,14 @@
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE PatternSynonyms, OverloadedStrings #-}
 module TT where
 
+import Prelude hiding (Num(..), pi)
 import Data.Monoid
 import Data.Dynamic
-import Pretty (D)
+import Pretty 
+import Algebra.Classes hiding (Sum)
 type CheckedDecls = (TDecls Val,[Val],VTele)
 data ModuleState
   = Loaded {moduleValue, moduleType :: Val}
@@ -17,7 +21,7 @@ type Modules = [(String,ModuleState)]
 
 data Loc = Loc { locFile :: String
                , locPos :: (Int, Int) }
-  deriving (Eq)
+  deriving (Eq,Ord)
 
 instance Show Loc where
   show (Loc name (i,j)) = name ++ "_L" ++ show i ++ "_C" ++ show j
@@ -34,7 +38,7 @@ noLoc x = (x, Loc "" (0,0))
 type Brc a    = (Label,(Binder,Ter' a))
 
 -- Telescope (x1 : A1) .. (xn : An)
-type Tele a   = [(Binder,Ter' a)]
+type Tele a   = [(Binder,Rig,Ter' a)]
 
 -- Labelled sum: c A1
 type LblSum a = [(Binder,Ter' a)]
@@ -54,7 +58,7 @@ declTers :: Decls a -> [Ter' a]
 declTers decl = [ d | (_,_,d) <- decl]
 
 declTele :: Decls a -> Tele a
-declTele decl = [ (x,t) | (x,t,_) <- decl]
+declTele decl = [ (x,free,t) | (x,t,_) <- decl]
 
 declDefs :: Decls () -> [(Binder,Ter)]
 declDefs decl = [ (x,d) | (x,_,d) <- decl]
@@ -63,7 +67,7 @@ declDefs decl = [ (x,d) | (x,_,d) <- decl]
 type Ter = Ter' ()
 type CTer = Ter' Val
 data Ter' a = App (Ter' a) (Ter' a)
-            | Pi String (Ter' a) (Ter' a)
+            | Pi String Rig (Ter' a) (Ter' a)
             | Lam Binder (Maybe (Ter' a)) (Ter' a)
             | RecordT (Tele a)
             | Record [(String,(Ter' a))]
@@ -90,21 +94,85 @@ data Ter' a = App (Ter' a) (Ter' a)
 --------------------------------------------------------------------------------
 -- | Values
 
-data VTele = VEmpty | VBind Binder Val (Val -> VTele)
+data VTele = VEmpty | VBind Binder Rig Val (Val -> VTele)
            | VBot -- Hack!
 
 instance Monoid VTele where
   mempty = VEmpty
   mappend VEmpty x = x
-  mappend (VBind x a xas) ys = VBind x a (\v -> xas v <> ys)
+  mappend (VBind x r a xas) ys = VBind x r a (\v -> xas v <> ys)
 
 teleBinders :: VTele -> [Binder]
-teleBinders (VBind x _ f) = x:teleBinders (f $ error "teleBinders: cannot look at values")
+teleBinders (VBind x _ _ f) = x:teleBinders (f $ error "teleBinders: cannot look at values")
 teleBinders _ = []
 
+data Interval a = a :.. a deriving (Eq,Show)
+data BNat = Fin Int | Inf deriving (Eq,Show)
+type Rig = Interval BNat
+pattern Free = Fin 0 :.. Inf
+free = zero :.. Inf
+
+instance AbelianAdditive BNat
+instance Additive BNat where
+  Inf + _ = Inf
+  _ + Inf = Inf
+  Fin x + Fin y = Fin (x+y)
+  zero = Fin zero
+
+instance Multiplicative BNat where
+  Fin 0 * _ = Fin 0
+  _ * Fin 0 = Fin 0
+  Inf * _ = Inf
+  _ * Inf = Inf
+  Fin x * Fin y = Fin (x*y)
+  one = Fin one
+
+  -- fromInteger = Fin . fromInteger
+instance Pretty BNat where
+  pretty Inf = "∞"
+  pretty (Fin x) = pretty x
+instance (Eq a, Pretty a) => Pretty (Interval a) where
+  pretty (x :.. y) | x == y = pretty x
+                   | otherwise = pretty x <> ".." <> pretty y
+
+instance Additive Rig where
+  a :.. b + c :.. d = (a+c) :.. (b+d)
+  zero = zero :.. zero
+
+instance Multiplicative Rig where
+  a :.. b * c :.. d = (a*c) :.. (b*d)
+  one = one :.. one
+
+class Lattice a where
+  (/\) :: a -> a -> a
+  (\/) :: a -> a -> a
+
+instance Lattice Int where
+  (/\) = min
+  (\/) = max
+
+instance Lattice BNat where
+  Inf /\ x = x
+  x /\ Inf = x
+  Fin x /\ Fin y = Fin (x /\ y)
+
+  Inf \/ x = x
+  x \/ Inf = x
+  Fin x \/ Fin y = Fin (x \/ y)
+
+instance Lattice a => Lattice (Interval a) where
+  (a :.. b) /\ (c :.. d) = (a \/ c) :.. (b /\ d)
+  (a :.. b) \/ (c :.. d) = (a /\ c) :.. (b \/ d)
+
+instance Ord BNat where
+  _ <= Inf = True
+  Inf <= _ = False
+  Fin x <= Fin y = x <= y
+instance Ord Rig where
+  a :.. b <= c :.. d = c <= a && b <= d
 data Val = VU
          | Ter CTer Env
-         | VPi String Val Val
+         | VPi String Rig Val Val
          | VRecordT VTele
          | VRecord [(String,Val)]
          | VCon Ident Val
