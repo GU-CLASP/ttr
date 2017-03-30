@@ -107,7 +107,7 @@ teleBinders (VBind x _ _ f) = x:teleBinders (f $ error "teleBinders: cannot look
 teleBinders _ = []
 
 data Interval a = a :.. a deriving (Eq,Show)
-data BNat = Fin Int | Inf deriving (Eq,Show)
+data BNat = Fin Integer | Inf deriving (Eq,Show)
 type Rig = Interval BNat
 pattern Free = Fin 0 :.. Inf
 free = zero :.. Inf
@@ -147,7 +147,7 @@ class Lattice a where
   (/\) :: a -> a -> a
   (\/) :: a -> a -> a
 
-instance Lattice Int where
+instance Lattice Integer where
   (/\) = min
   (\/) = max
 

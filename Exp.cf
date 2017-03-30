@@ -52,14 +52,10 @@ separator Branch ";" ;
 Label.    Label   ::= AIdent Exp ;
 separator Label "|" ;
 
-
--- Telescopes
-VTDecl.    VTDecl ::= "(" AIdent [AIdent] ":" Exp ")" ;
-terminator VTDecl "" ;
-
 -- Nonempty telescopes with Exp:s, this is hack to avoid ambiguities
 -- in the grammar when parsing Pi
-PseudoTDecl. PseudoTDecl ::=  Exp ":" Exp ;
+PseudoTDecl.  PseudoTDecl ::=  Exp ":" Exp ;
+WPseudoTDecl. PseudoTDecl ::=  Exp "::" Integer Exp ;
 
 separator PseudoTDecl ";" ;
 

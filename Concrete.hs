@@ -5,7 +5,7 @@ module Concrete where
 
 import Exp.Abs
 import qualified TT as C
-import TT (Interval(..), Rig, free)
+import TT (Interval(..), Rig, free, BNat(..))
 import Pretty
 
 import Control.Monad.Trans.RWS
@@ -43,9 +43,6 @@ unApps :: Exp -> [Exp] -> (Exp, [Exp])
 unApps (App u v) ws = unApps u (v : ws)
 unApps u         ws = (u, ws)
 
-vTele :: [VTDecl] -> Tele
-vTele decls = [ (i, free, typ) | VTDecl ident ids typ <- decls, i <- ident:ids ]
-
 -- turns an expression of the form App (... (App id1 id2) ... idn)
 -- into a list of idents
 pseudoIdents :: Exp -> Maybe [AIdent]
@@ -53,6 +50,10 @@ pseudoIdents = mapM unVar . uncurry (:) . flip unApps []
 
 pseudoTele :: [PseudoTDecl] -> Maybe Tele
 pseudoTele []                         = return []
+pseudoTele (WPseudoTDecl expr amount typ : pd) = do
+    ids <- pseudoIdents expr
+    pt  <- pseudoTele pd
+    return $ map (,Fin amount :.. Fin amount,typ) ids ++ pt
 pseudoTele (PseudoTDecl expr typ : pd) = do
     ids <- pseudoIdents expr
     pt  <- pseudoTele pd

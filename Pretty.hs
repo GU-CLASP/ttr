@@ -94,6 +94,9 @@ sep xs = PC.sep <$> (sequence xs)
 instance Pretty Int where
   pretty = showy
 
+instance Pretty Integer where
+  pretty = showy
+
 instance {-# OVERLAPPABLE #-} Pretty a => Pretty [a] where
   pretty = Pretty.list . map pretty
 
