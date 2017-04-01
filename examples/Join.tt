@@ -11,10 +11,7 @@ joinAB A B = split
                Inl x -> x
                Inr y -> y
 
-Meet : Type -> Type -> Type
-Meet A B = A /\ B
-
-JoinFunTest : (A B C D : Type) -> ((A -> B) \/ (C -> D)) -> (Meet A C) -> (B \/ D) -- bnfc bug here by inlining Meet
+JoinFunTest : (A B C D : Type) -> ((A -> B) \/ (C -> D)) -> (A /\ C) -> (B \/ D)
 JoinFunTest A B C D f x = f x
 
 
