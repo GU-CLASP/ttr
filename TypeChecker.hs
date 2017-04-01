@@ -1,3 +1,4 @@
+{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving, PatternSynonyms, FlexibleContexts, RecordWildCards, OverloadedStrings, TypeSynonymInstances, TupleSections#-}
@@ -188,9 +189,10 @@ check a t = case (a,t) of
   (VRecordT ts, Record fs) -> do
     Record <$> checkRecord ts fs
   (VMeet w v,_) -> check w t >> check v t
-  (VJoin w v,_) -> check w t `catchError` \e1 ->
-                   check v t `catchError` \e2 ->
-                   throwError $ sep [e1,"AND",e2]
+  -- (VJoin w v,_) -> check w t `catchError` \e1 ->
+  --                  check v t `catchError` \e2 ->
+  --                  throwError $ sep [e1,"AND",e2]
+  -- Unfortunately we cannot use the above rule because then we cannot derive x:A∨B ⊢ x:A∨B
   (_,Where e d) -> do
     (dd,d') <- unzip <$> checkDeclss d
     e' <- local (addDecls (mconcat d')) $ check a e
@@ -229,7 +231,7 @@ checkSub msg a v = do
     case sub k v a of
       Nothing -> return ()
       Just err -> do
-        oops $ sep ["In" <+> msg, pretty v <> " is not a subtype of " <> pretty a, "because " <> err]
+        oops $ sep [msg <> pretty v, " is not a subtype of ", pretty a, "because " <> err]
 
 checkType :: Ter -> Typing CTer
 checkType t = do
@@ -280,12 +282,9 @@ checkInfer e = case e of
       Just (b,v)  -> use b >> return (Var n,v)
       Nothing -> oops $ pretty n <> " is not declared"
   App t u -> do
-    (t',c) <- checkInfer t
-    case c of
-      VPi _ r a f -> do
-        (u',v) <- relax r (checkEval a u)
-        return $ (App t' u', app f v)
-      _       -> oops $ pretty c <> " is not a product"
+    (t',t'') <- checkInfer t
+    (u',retTyp) <- checkInferApp u t''
+    return (App t' u', retTyp)
   Proj l t -> do
     (t',a) <- relax (zero :.. one) (checkInfer t)
     e <- asks env
@@ -304,6 +303,22 @@ checkInfer e = case e of
     (_,d') <- unzip <$> checkDeclss d
     local (addDecls (mconcat d')) $ checkInfer t
   _ -> oops ("checkInfer " <> pretty e)
+
+
+checkInferApp :: Ter -> {- argument -}
+                 Val -> {- function type -} Typing (CTer,Val)
+checkInferApp u (VPi _ r a f) = do
+   (u',u'') <- relax r (checkEval a u)
+   return (u', app f u'')
+checkInferApp u (VJoin x y) = do
+  (u',typ1) <- checkInferApp u x
+  (_ ,typ2) <- checkInferApp u y
+  return (u',vJoin typ1 typ2)
+checkInferApp u (VMeet x y) = do
+  (u',typ1) <- checkInferApp u x `catchError` \_ -> checkInferApp u y
+  (_ ,typ2) <- checkInferApp u y `catchError` \_ -> return (u',typ1)
+  return (u',vMeet typ1 typ2)
+checkInferApp _ c = oops $ pretty c <> " is not a product"
 
 checkInferProj :: String -> {- ^ field to project-} Val -> {- ^ record value-} VTele -> {- ^ record type-} Typing Val
 checkInferProj l _ VEmpty = oops $ "field not found:" <> pretty l

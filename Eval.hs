@@ -262,12 +262,12 @@ sub :: Int -> Val -> Val -> Maybe D
 sub _ VU VU = Nothing
 sub k (VPi _ r u v) (VPi _ r' u' v') = do
   let w = mkVar k
-  included r' r <> conv k u' u  <> sub (k+1) (app v w) (app v' w)
+  included r' r <> sub k u' u  <> sub (k+1) (app v w) (app v' w)
 sub k (VRecordT fs) (VRecordT fs') = subTele k fs fs'
 sub k (VJoin a b) c = sub k a c <> sub k b c
-sub k (VMeet a b) c = sub k a c `orElse` sub k b c
 sub k c (VJoin a b) = sub k c a `orElse` sub k c b
 sub k c (VMeet a b) = sub k c a <> sub k c b
+sub k (VMeet a b) c = sub k a c `orElse` sub k b c
 sub k x x' = conv k x x'
 
 orElse :: Maybe D -> Maybe D -> Maybe D
