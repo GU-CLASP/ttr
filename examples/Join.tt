@@ -1,0 +1,31 @@
+module
+
+selfSubtype : (A B : Type) -> (A \/ B) -> (A \/ B)
+selfSubtype A B x = x
+
+Plus    : Type -> Type -> Type
+Plus A B = {Inl A | Inr B}
+
+joinAB : (A B : Type) -> Plus A B -> (A \/ B)
+joinAB A B = split
+               Inl x -> x
+               Inr y -> y
+
+Meet : Type -> Type -> Type
+Meet A B = A /\ B
+
+JoinFunTest : (A B C D : Type) -> ((A -> B) \/ (C -> D)) -> (Meet A C) -> (B \/ D) -- bnfc bug here by inlining Meet
+JoinFunTest A B C D f x = f x
+
+
+
+--                                       A ⊑ (A ‌\/ C)     (B \/ D) ⊑ D
+--                                     ----------------------------------- ⊑-→
+--                                       (A -> B) ⊑ (A ‌\/ C) -> (B \/ D)
+--                                  --------------------------------------------------- ⊑-∨-l
+--   t : (A -> B) \/ (A -> C)          (A -> B) \/ (A -> C) ⊑  (A ‌\/ C) -> (B \/ D)
+-- ------------------------------------------------------------------------------------------- conv
+--                    t : (A ‌\/ C) -> (B \/ D)
+
+
+
