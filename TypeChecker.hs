@@ -288,9 +288,7 @@ checkInfer e = case e of
   Proj l t -> do
     (t',a) <- relax (zero :.. one) (checkInfer t)
     e <- asks env
-    case a of
-      VRecordT rt -> (Proj l t',) <$> checkInferProj l (eval e t') rt
-      _          -> oops $ pretty a <> " is not a record-type"
+    (Proj l t',) <$> checkInferProj l (eval e t') a
   Meet t u -> do
     t' <- checkType t
     u' <- checkType u
@@ -320,12 +318,22 @@ checkInferApp u (VMeet x y) = do
   return (u',vMeet typ1 typ2)
 checkInferApp _ c = oops $ pretty c <> " is not a product"
 
-checkInferProj :: String -> {- ^ field to project-} Val -> {- ^ record value-} VTele -> {- ^ record type-} Typing Val
-checkInferProj l _ VEmpty = oops $ "field not found:" <> pretty l
-checkInferProj l r (VBind (x,_) _rig a rest)
+
+checkInferProj :: String -> {- ^ field to project-} Val -> {- ^ record value-} Val -> {- ^ record type-} Typing Val
+checkInferProj l r (VRecordT rt) = checkInferProj' l r rt
+checkInferProj l r (VMeet x y) = do
+  typ1 <- checkInferProj l r x `catchError` \_ -> checkInferProj l r y
+  typ2 <- checkInferProj l r y `catchError` \_ -> return typ1
+  return (vMeet typ1 typ2)
+checkInferProj _ _ a = oops $ pretty a <> " is not a record-type"
+
+
+checkInferProj' :: String -> {- ^ field to project-} Val -> {- ^ record value-} VTele -> {- ^ record type-} Typing Val
+checkInferProj' l _ VEmpty = oops $ "field not found:" <> pretty l
+checkInferProj' l r (VBind (x,_) _rig a rest)
   | x == l = return a
-  | otherwise = checkInferProj l r (rest (projVal x r))
-checkInferProj _ _ VBot = error "checkInferProj: VBot escaped from meet"
+  | otherwise = checkInferProj' l r (rest (projVal x r))
+checkInferProj' _ _ VBot = error "checkInferProj: VBot escaped from meet"
 
 checks :: VTele -> [Ter] -> Typing [CTer]
 checks _              []     = return []
