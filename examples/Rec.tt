@@ -22,7 +22,9 @@ second' A B r = r.snd
 open params
 
 PN : Type
-PN = [x : Ind; cn : Ind -> Type; isCn : cn x]
+PN = [x : Ind;
+      cn : Ind -> Type;
+      isCn : cn x]
 
 Anim : Type
 Anim = [x : Ind; isAnimal : Animal x]
@@ -46,4 +48,19 @@ ManOwnADonkey = [x : Ind;
 f : ManOwnADonkey -> Huma
 f r = (x = x, isHuman = p, isAnimal = _)
   where open r
-  
+
+
+VP : Type
+VP = Ind -> Type
+
+NP' : Type
+NP' = (verb : VP) -> [subject : Ind; holds : verb subject]
+
+S : Type
+S = [subject : Ind;
+     verb : Ind -> Type;
+     holds : verb subject]
+
+
+-- appVP' : VP -> NP' -> S
+-- appVP' vp np = (verb = vp, subject = s0.subject, holds = s0.holds)
