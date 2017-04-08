@@ -314,7 +314,7 @@ showVal ctx t0 = case t0 of
   (Ter t env)  -> showTer ctx env t
   (VCon c us)  -> prn 4 (hang 2 ("`" <> pretty c) (showVal 5 us))
   (VPi nm r a f) -> pp 1 $ \p ->
-     if dependent f then withVar nm $ \v -> (parens (pretty v <+> ":" <> pretty r <+> pretty a) <+> "->") </> p (f `app` (VVar v))
+     if dependent f then withVar nm $ \v -> (parens (pretty v <+> prettyBind r <+> pretty a) <+> "->") </> p (f `app` (VVar v))
      else (showVal 2 a  <+> "->") </> p (f `app` (VVar "_"))
   (VApp _ _)   -> pp 4 (\p -> hang 2 (p u) (showArgs vs))
      where (u:vs) = fnArgs t0
@@ -358,26 +358,30 @@ prettyLook x Empty = pretty x {- typically bound in a Split -}
 
 prettyTele :: VTele -> [D]
 prettyTele VEmpty = []
-prettyTele (VBind (nm,_l) r ty rest) = (pretty nm <+> ":"<> pretty r <+> pretty ty) : prettyTele (rest $ VVar nm)
+prettyTele (VBind (nm,_l) r ty rest) = (pretty nm <+> prettyBind r <+> pretty ty) : prettyTele (rest $ VVar nm)
+
+prettyBind :: Rig -> D
+prettyBind (Fin 0 :.. Inf) = ":"
+prettyBind r = ":" <> pretty r
 
 instance Pretty VTele where
   pretty = encloseSep "[" "]" ";" . prettyTele
 
 instance Pretty Env where
-  pretty e = encloseSep "[" "]" ";" (showEnv e)
+  pretty e = encloseSep "(" ")" ";" (showEnv e)
 
 showEnv :: Env -> [D]
 showEnv e0 = case e0 of
     Empty            -> []
     (PDef _xas env)   -> showEnv env
-    (Pair env ((x,_),u)) -> (hang 2 (pretty x <> "=") (pretty u)) : showEnv env
+    (Pair env ((x,_),u)) -> (hang 2 (pretty x <+> "=") (pretty u)) : showEnv env
 
 instance Pretty (Ter' a) where
   pretty = showTer 0 Empty
 
 showTele :: Env -> Tele a -> [D]
 showTele _ [] = mempty
-showTele ρ (((x,_loc),r,t):tele) = (pretty x <> " :" <> pretty r <+> showTer 0 ρ t) : showTele ρ tele
+showTele ρ (((x,_loc),r,t):tele) = (pretty x <+> prettyBind r <+> showTer 0 ρ t) : showTele ρ tele
 
 showTer :: Int -> Env -> Ter' a -> D
 showTer ctx ρ t0 = case t0 of
@@ -389,7 +393,7 @@ showTer ctx ρ t0 = case t0 of
    (App _ _)   -> pp 4 $ \p -> p e0 <+> showTersArgs ρ es
      where (e0:es) = fnArgsTer t0
    (Pi _ r a (Lam ("_",_) _ t)) -> pp 1 $ \p -> (showTer 2 ρ a <+> "->") </> p t
-   (Pi _ r a (Lam x _ t)) -> pp 1 $ \p -> (parens (pretty x <> ":" <> showTer 0 ρ a) <+> "->") </> p t
+   (Pi _ r a (Lam x _ t)) -> pp 1 $ \p -> (parens (pretty x <+> prettyBind r <+> showTer 0 ρ a) <+> "->") </> p t
    (Pi _ r e0 e1)    -> "Pi" <+> showTersArgs ρ [e0,e1]
    (Lam (x,_) _ e) -> pp 2 (\p -> hang 0 ("\\" <> pretty x <+> "->") (p e))
    (Proj l e)    -> pp 5 (\p -> p e <> "." <> pretty l)
