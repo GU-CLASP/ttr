@@ -231,7 +231,7 @@ checkSub msg a v = do
     case sub k v a of
       Nothing -> return ()
       Just err -> do
-        oops $ sep [msg <> pretty v, " is not a subtype of ", pretty a, "because " <> err]
+        oops $ sep [hang 2 msg (pretty v), hang 2 "is not a subtype of" (pretty a), hang 2 "because" err]
 
 checkType :: Ter -> Typing CTer
 checkType t = do
