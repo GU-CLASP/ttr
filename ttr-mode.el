@@ -7,7 +7,7 @@
 
 ;; create regex strings
 (setq ttr-keywords-regexp (regexp-opt ttr-keywords 'words))
-(setq ttr-operators-regexp (regexp-opt '(":" "::" "->" "-o" "=" "\\" "|" "\\" "*" "_" "[" "]" "{" "}") t))
+(setq ttr-operators-regexp (regexp-opt '(":" "::" "->" "-o" "=" "\\" "|" "\\" "*" "_" "[" "]" "{" "}" "(" ")") t))
 (setq ttr-special-regexp (regexp-opt ttr-special 'words))
 (setq ttr-def-regexp "^[[:word:]]+")
 
