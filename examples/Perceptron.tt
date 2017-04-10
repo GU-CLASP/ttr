@@ -1,19 +1,48 @@
-\(params : [Ind : Type]) -> module
+let open import Reals
+    open import Lists
+in \(params : [ Ind : Type
+           ; LocatedAt : Ind -> List Real -> Type
+           ; a101 : Ind
+           ; ]) -> module
 
-open import Lists
 open import Props
-open import Reals
 open params
 
-kappa : [w : List Real;
+Location : Type
+Location = List Real
+
+kappa : [w : Location;
          t : Real;
-         c : List Real -> Austinian]
-kappa = (w = w, t = t, c = c)
-  where w : List Real
+         LeftLoc : Location -> Type;
+         c : (x : Location) -> Maybe (LeftLoc x)]
+kappa = (w = w, LeftLoc = LeftLoc, t = t, c = f)
+  where w : Location
         w = 'cons (head = 0.800, tail = 'cons (head = 0.010, tail = 'nil ()))
         t : Real
         t = 0.090
-        f : (v : List Real) -> Dec (Positive (subtract t (dotProd w v)))
-        f v = decidePositivity (subtract t (dotProd w v))
-        c : (v : List Real) -> Austinian
-        c v = decToClass (Positive (subtract t (dotProd w v))) (f v)
+        LeftLoc : Location -> Type
+        LeftLoc x = Positive (subtract t (dotProd w x))
+        f : (v : Location) -> Maybe (Positive (subtract t (dotProd w v)))
+        f v = decToMaybe (LeftLoc v) (decidePositivity (subtract t (dotProd w v)))
+
+S : Type
+S = [foo : Ind;
+     srpos : Location;
+     p : LocatedAt foo srpos]
+
+alpha : [Left : Ind -> Type;
+         c : (s:S) -> Maybe (Left s.foo)]
+alpha = (Left = Left, c = c)
+  where Left : Ind -> Type
+        Left i = [x:Location; l:LocatedAt i x; p:kappa.LeftLoc x]
+        c : (s:S) -> Maybe (Left s.foo)
+        c s = mapMaybe (kappa.LeftLoc (s.srpos)) (Left (s.foo)) _ (kappa.c s.srpos)
+        f : (s:S) -> kappa.LeftLoc (s.srpos) -> Left (s.foo)
+        f s leftLoc = (x = s.srpos, l = s.p, p = leftLoc)
+
+s : S
+s = (foo = a101, srpos = _, p = _)
+
+-- alpha.Left : Ind -> Type
+-- alpha.c s : {left : alpha.Left s.foo | right : Not (alpha.Left s.foo)}
+

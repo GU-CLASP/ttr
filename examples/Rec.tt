@@ -8,6 +8,7 @@
             Hug    : Ind -> Ind -> Type;
             Own    : Ind -> Ind -> Type;
             a0     : Ind;
+            a100   : Ind;
             aH     : Human a0;
             aA     : Animal a0;
             believe : Type -> Ind -> Type;

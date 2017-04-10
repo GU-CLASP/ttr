@@ -6,8 +6,11 @@ Bot = { }
 Top : Type
 Top = [ ]
 
+Not : Type -> Type
+Not T = T -> Bot
+
 Dec : Type -> Type
-Dec T = {yes T | no (T -> Bot)}
+Dec T = {yes T | no (Not T)}
 
 Decidable : (T : Type) -> (P : T -> Type) -> Type
 Decidable T P = (x : T) -> Dec (P x)
@@ -30,3 +33,16 @@ decBot = 'no (\p -> p)
 
 decTop : Dec Top
 decTop = 'yes ()
+
+Maybe : Type -> Type
+Maybe T = {yes T | nothing []}
+
+mapMaybe : (A B : Type) -> (A -> B) -> Maybe A -> Maybe B
+mapMaybe A B f = split
+  nothing _ -> 'nothing ()
+  yes x -> 'yes (f x)
+
+decToMaybe : (T : Type) -> Dec T -> Maybe T
+decToMaybe T = split
+  yes x -> 'yes x
+  no _ -> 'nothing ()
