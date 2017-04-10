@@ -1,8 +1,12 @@
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE StandaloneDeriving #-}
+
 module Eval where
 
 import Prelude hiding (Num(..), pi)
@@ -423,8 +427,8 @@ showSplitBranches ρ branches = encloseSep "{" "}" ";"
 showBranch :: Env -> (Binder, Ter' a) -> D
 showBranch env ((b,_),arg) = pretty b <+> (showTer 0 env arg)
 
-instance Pretty Loc where
-  pretty (Loc x l) = pretty x <> "@" <> pretty l
+instance Pretty Ctxt where
+  pretty ctxt = vcat [pretty nm <+> ":" <+> pretty typ | ((nm,_),typ) <- ctxt]
 
 showTersArgs :: Env -> [Ter' a] -> D
 showTersArgs ρ = sep . map (showTer 5 ρ)
@@ -468,4 +472,4 @@ instance Value VTele where
   unknowns (VBind _binder _rig x y) = unknowns x ++ unknowns (y (VVar "___UNK___"))
   unknowns VBot = []
 
-  
+deriving instance  Show ModuleState

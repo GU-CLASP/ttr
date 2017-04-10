@@ -25,6 +25,9 @@ data Loc = Loc { locFile :: String
 
 instance Show Loc where
   show (Loc name (i,j)) = name ++ "_L" ++ show i ++ "_C" ++ show j
+instance Pretty Loc where
+  pretty (Loc fname (line,col)) = pretty fname <> ":" <> pretty line <> ":" <> pretty col
+
 
 
 type Ident  = String

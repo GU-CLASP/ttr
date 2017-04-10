@@ -18,6 +18,7 @@ import qualified Data.Map as M
 type Sho a = Reader (M.Map String Int) a
 type D = Sho Doc
 
+
 withVar :: String -> (String -> Sho a) -> Sho a
 withVar s k = do
   nextIdx <- ask
@@ -47,6 +48,9 @@ namesFrom xs = [x ++ n | n <- "":map show [(1::Int)..], x <- map (:[]) xs]
 
 render :: D -> String
 render d = PC.render $ runReader d M.empty
+
+instance Show D where
+  show = Pretty.render
 
 class Pretty a where
   pretty :: a -> D
