@@ -103,7 +103,7 @@ go _ t k = do putStrLn $ "Module does not have a record type, but instead:\n" ++
 
 -- The main loop
 loop :: [Flag] -> FilePath -> TC.TEnv -> Interpreter ()
-loop flags f tenv@(TC.TEnv _ rho _ _ _ms) = do
+loop flags f tenv@(TC.TEnv _ _rho _ _ _ms) = do
   input <- getInputLine prompt
   case input of
     Nothing    -> outputStrLn help >> loop flags f tenv
@@ -140,6 +140,7 @@ load prefix f = do
   case lookup f ms of
     Just C.Loading -> return $ C.Failed "cycle in imports"
     Just r@(C.Loaded _ _) -> return r
+    Just (C.Failed err) -> return (C.Failed err)
     Nothing -> do
       let fname = (prefix FP.</> f <.> "tt")
       b <- liftIO $ doesFileExist fname
@@ -162,7 +163,6 @@ load prefix f = do
                     return x
       modify ((f,res):)
       return res
-
 
 help :: String
 help = "\nAvailable commands:\n" ++
