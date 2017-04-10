@@ -1,0 +1,31 @@
+* Possible improvements
+** make convertibility <-> mutual subtype
+
+define a = b as a <= b and b <= a.
+This is useful to capture more equalities between meet and joins.
+Must be careful with recursive cases.
+
+** Polarised function types
+
+f : (x :+ A) -> B
+
+and so:
+
+f a <= f b  iff  a <= b
+
+This allows to capture subtyping without a specifc judgement:
+
+
+Subtype A B = (P : (x :+ Type) -> Type) -> P A -> P B
+
+
+We could also capture subtypes as follows:
+
+
+Subtype' A B = [f : A -> B; p : f x = x]
+
+But = must be heterogeneous. This is a bit tricky.
+
+
+Note that we can get a convertion function from 'Subtype'. We can also
+show that it is an identity.

@@ -254,6 +254,8 @@ conv k (VApp u v)   (VApp u' v')   = conv k u u' <> conv k v v'
 conv k (VSplit u v) (VSplit u' v') = conv k u u' <> conv k v v'
 conv _ (VVar x)     (VVar x')      = x `equal` x'
 conv _ (VAbstract n) (VAbstract n') = n `equal` n'
+conv k (VJoin a b) (VJoin a' b') = (conv k a a' <> conv k b b') `orElse` (conv k a b' <> conv k b a')
+conv k (VMeet a b) (VMeet a' b') = (conv k a a' <> conv k b b') `orElse` (conv k a b' <> conv k b a')
 conv _ (VPrim _ _) (VPrim _ _) = Nothing
 conv _ x              x'           = different x x'
 
