@@ -16,7 +16,6 @@ import System.Console.Haskeline
 import Exp.Lex
 import Exp.Par
 import Exp.Print hiding (render)
-import Exp.Abs
 import Exp.Layout
 import Exp.ErrM
 import Concrete
@@ -67,22 +66,22 @@ main = do
       | otherwise -> case files of
        []  -> do
          putStrLn welcome
-         runInputT (settings []) (loop flags [] (TC.emptyEnv []))
+         runInputT (settings []) (loop flags "" [] (TC.emptyEnv []))
        [f] -> do
          putStrLn welcome
          putStrLn $ "Loading " ++ show f
-         initLoop flags f
+         initLoop flags (dropFileName f) (dropExtension (takeFileName f))
        _   -> putStrLn $ "Input error: zero or one file expected\n\n" ++
                          usageInfo usage options
     (_,_,errs) -> putStrLn $ "Input error: " ++ concat errs ++ "\n" ++
                              usageInfo usage options
 
 -- Initialize the main loop
-initLoop :: [Flag] -> FilePath -> IO ()
-initLoop flags f = do
+initLoop :: [Flag] -> FilePath -> FilePath -> IO ()
+initLoop flags prefix f = do
   -- Parse and type-check files
-  (res,ms) <- runStateT (load (dropFileName f) (dropExtension (takeFileName f))) []
-  let k ns e = runInputT (settings ns) (loop flags f (e (TC.emptyEnv ms)))
+  (res,ms) <- runStateT (load prefix f) []
+  let k ns e = runInputT (settings ns) (loop flags prefix f (e (TC.emptyEnv ms)))
   case res of
     C.Failed err -> do
       putStrLn $ render $ sep ["Loading failed:",err]
@@ -102,36 +101,37 @@ go _ t k = do putStrLn $ "Module does not have a record type, but instead:\n" ++
       -- Compute names for auto completion
 
 -- The main loop
-loop :: [Flag] -> FilePath -> TC.TEnv -> Interpreter ()
-loop flags f tenv@(TC.TEnv _ _rho _ _ _ms) = do
+loop :: [Flag] -> FilePath -> FilePath -> TC.TEnv -> Interpreter ()
+loop flags prefix f tenv@(TC.TEnv _ _rho _ _ _ms) = do
+  let cont = loop flags prefix f tenv
   input <- getInputLine prompt
   case input of
-    Nothing    -> outputStrLn help >> loop flags f tenv
+    Nothing    -> outputStrLn help >> cont
     Just ":q"  -> return ()
-    Just ":r"  -> lift $ initLoop flags f
+    Just ":r"  -> lift $ initLoop flags prefix f
     Just (':':'l':' ':str)
       | ' ' `elem` str -> do outputStrLn "Only one file allowed after :l"
-                             loop flags f tenv
-      | otherwise      -> lift $ initLoop flags str
+                             cont
+      | otherwise      -> lift $ initLoop flags prefix str
     Just (':':'c':'d':' ':str) -> do lift (setCurrentDirectory str)
-                                     loop flags f tenv
-    Just ":h"  -> outputStrLn help >> loop flags f tenv
-    Just str   -> case pExp (lexer str) of
-      Bad err -> outputStrLn ("Parse error: " ++ err) >> loop flags f tenv
-      Ok  expr ->
-        case runResolver {- FIXME -} "<interactive>" $ resolveExp expr of
-          Left  err  -> do outputStrLn (render ("Resolver failed:" </> err))
-                           loop flags f tenv
-          Right (body,(),_imports_ignored_here) -> do
-          let (x,msgs) = TC.runInfer tenv body
-          forM_ msgs $ outputStrLn . render
-          case x of
-            Left err -> do outputStrLn (render ("Could not type-check:" </> err))
-                           loop flags f tenv
-            Right (v,typ)  -> do
-              outputStrLn (render ("TYPE:" </> pretty typ))
-              liftIO $ putStrLn (render ("EVAL:" </> pretty v))
-              loop flags f tenv
+                                     cont
+    Just ":h"  -> outputStrLn help >> cont
+    Just str   -> do
+      case pExp (lexer str) of
+        Bad err -> outputStrLn ("Parse error: " ++ err)
+        Ok  expr -> do
+          case runResolver {- FIXME -} "<interactive>" $ resolveExp expr of
+            Left  err  -> outputStrLn (render ("Resolver failed:" </> err))
+            Right (body,(),_imports_ignored_here) -> do
+            let (x,msgs) = TC.runInfer tenv body
+            forM_ msgs $ outputStrLn . render
+            case x of
+              Left err -> do outputStrLn (render ("Could not type-check:" </> err))
+              Right (v,typ)  -> do
+                outputStrLn (render ("TYPE:" </> pretty typ))
+                liftIO $ putStrLn (render ("EVAL:" </> pretty v))
+      cont
+
 
 load :: String -> FilePath -> StateT C.Modules IO C.ModuleState
 load prefix f = do
