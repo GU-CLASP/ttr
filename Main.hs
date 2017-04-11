@@ -7,9 +7,6 @@ module Main where
 
 import Data.String
 import Control.Monad.Trans.State.Strict
--- import Control.Monad.State.Class
--- import Control.Monad.Trans.RWS
--- import Control.Monad.State
 import Control.Monad.Except
 import Data.List
 import System.Directory
@@ -131,22 +128,28 @@ loop flags prefix f = do
                                      cont
     Just ":h"  -> outputStrLn help >> cont
     Just str   -> do
-      case pExp (lexer str) of
-        Bad err -> outputStrLn ("Parse error: " ++ err)
-        Ok  expr -> do
-          case runResolver {- FIXME -} "<interactive>" $ resolveExp expr of
-            Left  err  -> outputStrLn (render ("Resolver failed:" </> err))
-            Right (body,(),_imports_ignored_here) -> do
-            e <- lift get
-            let (x,msgs) = TC.runInfer (mkEnv e (TC.emptyEnv (modules e))) body
-            forM_ msgs $ outputStrLn . render
-            case x of
-              Left err -> do outputStrLn (render ("Could not type-check:" </> err))
-              Right (v,typ)  -> do
-                outputStrLn (render ("TYPE:" </> pretty typ))
-                liftIO $ putStrLn (render ("EVAL:" </> pretty v))
+      l <- lift (loadExpression True prefix "<interactive>" str)
+      case l of
+        C.Failed err -> outputStrLn (render err)
+        C.Loaded v typ -> do
+          outputStrLn (render ("TYPE:" </> pretty typ))
+          liftIO $ putStrLn (render ("EVAL:" </> pretty v))
       cont
 
+loadExpression inEnv prefix f s = do
+  let ts = lexer s
+  case pExp ts of
+      Bad err -> do
+        return $ C.Failed $ sep ["Parse failed in", fromString f, fromString err]
+      Ok m -> do
+        case runResolver f (resolveExp m) of
+          Left err -> return $ C.Failed $ sep ["Resolver error:", err]
+          Right (t,_,imps) -> do
+            forM_ imps (load prefix)
+            e <- get
+            let (x,msgs) = TC.runModule ((if inEnv then mkEnv e else id) (TC.emptyEnv (modules e))) t
+            liftIO $ forM_ msgs $ putStrLn . render
+            return x
 
 load :: String -> FilePath -> Loader C.ModuleState
 load prefix f = do
@@ -163,19 +166,7 @@ load prefix f = do
         then return $ C.Failed $ sep ["file not found: ", fromString fname]
         else do
           s <- liftIO $ readFile fname
-          let ts = lexer s
-          case pExp ts of
-              Bad err -> do
-                return $ C.Failed $ sep ["Parse failed in", fromString f, fromString err]
-              Ok m -> do
-                case runResolver f (resolveExp m) of
-                  Left err -> return $ C.Failed $ sep ["Resolver error:", err]
-                  Right (t,_,imps) -> do
-                    forM_ imps (load prefix)
-                    ms' <- modules <$> get
-                    let (x,msgs) = TC.runModule (TC.emptyEnv ms') t
-                    liftIO $ forM_ msgs $ putStrLn . render
-                    return x
+          loadExpression False prefix f s
       modify (\e -> e {modules = (f,res):modules e})
       return res
 
