@@ -1,5 +1,5 @@
 js: *.hs Exp/Par.hs Exp/Lex.hs
-	nix-shell ghcjs.nix --run "ghcjs --make JS"
+	nix-shell ghcjs/shell.nix --run "ghcjs --make JS"
 
 bnfc: Exp/Lex.x
 
@@ -16,6 +16,6 @@ Exp/Lex.x Exp/Lex.y: Exp.cf
 	bnfc --haskell -d Exp.cf
 
 clean:
-	rm -f *.log *.aux *.hi *.o
+	rm -f *.log *.aux *.hi *.o *.js_o *.js_hi
 	cd Exp && rm -f ParExp.y LexExp.x LexhExp.hs \
-                        ParExp.hs PrintExp.hs AbsExp.hs *.o *.hi
+                        ParExp.hs PrintExp.hs AbsExp.hs *.o *.hi *.js_o *.js_hi
