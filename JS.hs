@@ -26,7 +26,7 @@ main = do
   putStrLn "ttr starting"
   Just doc <- currentDocument
   body <- getBodyUnsafe doc
-  setInnerHTML body (Just "<h1>TTR</h1> Enter the program to check here: <p/> <textarea id='input'> </textarea> <p/> <button id='checkButton'>check</button>")
+  setInnerHTML body (Just "<h1>TTR</h1> Enter the program to check here: <p/> <textarea id='input' cols=92 rows=40> </textarea> <p/> <button id='checkButton'>check</button>")
 
   Just elTextArea <- getElementById doc "input"
   Just textArea <- castTo HTMLTextAreaElement elTextArea
