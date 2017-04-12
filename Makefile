@@ -1,16 +1,21 @@
-OPT=0
+js: *.hs Exp/Par.hs Exp/Lex.hs
+	nix-shell ghcjs.nix --run "ghcjs --make JS"
 
-all:
-	ghc --make -O$(OPT) -o cubical Main.hs
-bnfc:
-	bnfc --haskell -d Exp.cf
+bnfc: Exp/Lex.x
+
+Exp/Par.hs: Exp/Par.y
 	happy -gca Exp/Par.y
+
+Exp/Lex.hs: Exp/Lex.x
 	alex -g Exp/Lex.x
-	ghc --make -O$(OPT) Exp/Test.hs -o Exp/Test
+
+Exp/Test: Exp/Test.hs
+	ghc --make Exp/Test.hs -o Exp/Test
+
+Exp/Lex.x Exp/Lex.y: Exp.cf
+	bnfc --haskell -d Exp.cf
+
 clean:
-	rm -f *.log *.aux *.hi *.o cubical
+	rm -f *.log *.aux *.hi *.o
 	cd Exp && rm -f ParExp.y LexExp.x LexhExp.hs \
                         ParExp.hs PrintExp.hs AbsExp.hs *.o *.hi
-
-tests:
-	runghc Tests.hs
