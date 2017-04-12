@@ -7,8 +7,8 @@ module Main (
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Concurrent.MVar (takeMVar, putMVar, newEmptyMVar)
 import GHCJS.DOM
-import GHCJS.DOM.Types (HTMLParagraphElement(..), HTMLSpanElement(..), unsafeCastTo, HTMLTextAreaElement(..), HTMLButtonElement(..))
-import GHCJS.DOM.Document (getBodyUnsafe, createElementUnsafe, createTextNode)
+import GHCJS.DOM.Types (HTMLParagraphElement(..), HTMLSpanElement(..), unsafeCastTo, castTo, HTMLTextAreaElement(..), HTMLButtonElement(..))
+import GHCJS.DOM.Document (getBodyUnsafe, createElementUnsafe, createTextNode, getElementById)
 import GHCJS.DOM.Element (setInnerHTML)
 import GHCJS.DOM.Node (appendChild)
 import GHCJS.DOM.EventM (on, mouseClientXY)
@@ -16,6 +16,7 @@ import qualified GHCJS.DOM.Document as D (click)
 import qualified GHCJS.DOM.Element as E (click)
 import qualified GHCJS.DOM.HTMLTextAreaElement as TA (getValue)
 import qualified GHCJS.DOM.HTMLButtonElement as B (getValue)
+import qualified GHCJS.DOM.Node as N (setNodeValue)
 import Loader
 import TT (ModuleState(..))
 import Control.Monad.Trans.State.Strict
@@ -25,30 +26,29 @@ main = do
   putStrLn "ttr starting"
   Just doc <- currentDocument
   body <- getBodyUnsafe doc
-  setInnerHTML body (Just "<h1>TTR</h1> Enter the program to check here:")
+  setInnerHTML body (Just "<h1>TTR</h1> Enter the program to check here: <p/> <textarea id='input'> </textarea> <p/> <button id='checkButton'>check</button>")
 
-  textArea <- createElementUnsafe doc (Just "textarea") >>= unsafeCastTo HTMLTextAreaElement
-  appendChild body (Just textArea)
+  Just elTextArea <- getElementById doc "input"
+  Just textArea <- castTo HTMLTextAreaElement elTextArea
 
-  checkButton <- createElementUnsafe doc (Just "button") >>= unsafeCastTo HTMLButtonElement
-  buttonText <- createTextNode doc "check"
-  appendChild checkButton buttonText
-  appendChild body (Just checkButton)
+  Just elCheckButton <- getElementById doc "checkButton"
+  Just checkButton <- castTo HTMLButtonElement elCheckButton
+
+  newParagraph <- createElementUnsafe doc (Just "p") >>= unsafeCastTo HTMLParagraphElement
+  Just replyNode <- createTextNode doc "<Checker output>"
+  appendChild newParagraph (Just replyNode)
+  appendChild body (Just newParagraph)
 
   on checkButton E.click $ do
       Just textAreaContents <- TA.getValue textArea
-      newParagraph <- createElementUnsafe doc (Just "p") >>= unsafeCastTo HTMLParagraphElement
       (l,_state) <- liftIO $ runStateT (loadExpression False "" "<interactive>" textAreaContents) initState
       let (reply::String) = render $ case l of
             Failed err -> sep [text "Checking failed:",err]
             Loaded v t -> text "Checking successful."
-
-      replyNode <- createTextNode doc reply
-      appendChild newParagraph replyNode
-      appendChild body (Just newParagraph)
+      N.setNodeValue replyNode (Just reply)
       return ()
 
-  exitMVar <- liftIO newEmptyMVar
+  -- exitMVar <- liftIO newEmptyMVar
   -- In case we want an exit button:
   -- exit <- createElementUnsafe doc (Just "span") >>= unsafeCastTo HTMLSpanElement
   -- text <- createTextNode doc "Click here to exit"
@@ -57,19 +57,17 @@ main = do
   -- on exit E.click $ liftIO $ putMVar exitMVar ()
 
   -- -- Force all all the lazy evaluation to be executed
-  syncPoint
+  -- syncPoint
 
 
   -- -- In GHC compiled version the WebSocket connection will end when this
   -- -- thread ends.  So we will wait until the user clicks exit.
-  liftIO $ takeMVar exitMVar
-  setInnerHTML body (Just ("<h1>DONE!</h1>") )
+  -- liftIO $ takeMVar exitMVar
+  -- setInnerHTML body (Just ("<h1>DONE!</h1>") )
   return ()
 
 {-
-Local Variables:
 dante-target: js-ttr
 dante-repl-command-line: ("nix-shell" "ghcjs.nix" "--run" "ghcjs --interactive")
-End:
 -}
 
