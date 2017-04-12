@@ -26,7 +26,7 @@ main = do
   putStrLn "ttr starting"
   Just doc <- currentDocument
   body <- getBodyUnsafe doc
-  setInnerHTML body (Just "<h1>TTR</h1> Enter the program to check here: <p/> <textarea id='input' cols=92 rows=40> </textarea> <p/> <button id='checkButton'>check</button>")
+  setInnerHTML body (Just "<h1>TTR</h1> Enter the program to check here: <p/> <textarea id='input' cols=80 rows=35 style='font-family: monospace;font-size:12pt'></textarea> <p/> <button id='checkButton'>check</button> <pre id='output'></pre>")
 
   Just elTextArea <- getElementById doc "input"
   Just textArea <- castTo HTMLTextAreaElement elTextArea
@@ -34,10 +34,9 @@ main = do
   Just elCheckButton <- getElementById doc "checkButton"
   Just checkButton <- castTo HTMLButtonElement elCheckButton
 
-  newParagraph <- createElementUnsafe doc (Just "p") >>= unsafeCastTo HTMLParagraphElement
+  Just newParagraph <- getElementById doc "output"
   Just replyNode <- createTextNode doc "<Checker output>"
   appendChild newParagraph (Just replyNode)
-  appendChild body (Just newParagraph)
 
   on checkButton E.click $ do
       Just textAreaContents <- TA.getValue textArea
