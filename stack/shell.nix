@@ -11,10 +11,10 @@ let
     #   };
     # }
     ;
-  ghc = hp.ghcWithPackages (ps: with ps; [stack alex happy hscolour hsc2hs]);
+  ghc = hp.ghcWithPackages (ps: with ps; [stack alex happy hscolour]);
 in
 pkgs.stdenv.mkDerivation {
   name = "my-haskell-env-0";
-  buildInputs = [ ghc ];
+  buildInputs = [ ghc pkgs.gmp4 ];
   shellHook = "eval $(egrep ^export ${ghc}/bin/ghc)";
 }
