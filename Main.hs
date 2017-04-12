@@ -5,31 +5,21 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Main where
 
-import Data.String
 import Control.Monad.Trans.State.Strict
 import Control.Monad.Except
 import Data.List
 import System.Directory
 import System.FilePath hiding ((</>))
-import qualified System.FilePath as FP
 import System.Environment
 import System.Console.GetOpt
 import System.Console.Haskeline
 
-import Exp.Lex
-import Exp.Par
-import Exp.Print hiding (render)
-import Exp.Layout
-import Exp.ErrM
-import Concrete
 import qualified TypeChecker as TC
 import qualified TT as C
 import qualified Eval as E
 import Pretty
-type Loader = StateT InterpState IO
-data InterpState = IS {mkEnv :: TC.TEnv -> TC.TEnv, names :: [String], modules :: C.Modules}
-initState :: InterpState
-initState = IS id [] []
+import Loader
+
 type Interpreter a = InputT Loader a
 
 -- Flag handling
@@ -45,14 +35,6 @@ welcome, usage, prompt :: String
 welcome = "ttr\n"
 usage   = "Usage: ttr [options] <file.tt>\nOptions:"
 prompt  = "> "
-
-lexer :: String -> [Token]
-lexer = resolveLayout True . myLexer
-
-showTree :: (Show a, Print a) => a -> IO ()
-showTree tree = do
-  putStrLn $ "\n[Abstract Syntax]\n\n" ++ show tree
-  putStrLn $ "\n[Linearized tree]\n\n" ++ printTree tree
 
 -- Used for auto completion
 searchFunc :: [String] -> String -> [Completion]
@@ -136,39 +118,6 @@ loop flags prefix f = do
           liftIO $ putStrLn (render ("EVAL:" </> pretty v))
       cont
 
-loadExpression inEnv prefix f s = do
-  let ts = lexer s
-  case pExp ts of
-      Bad err -> do
-        return $ C.Failed $ sep ["Parse failed in", fromString f, fromString err]
-      Ok m -> do
-        case runResolver f (resolveExp m) of
-          Left err -> return $ C.Failed $ sep ["Resolver error:", err]
-          Right (t,_,imps) -> do
-            forM_ imps (load prefix)
-            e <- get
-            let (x,msgs) = TC.runModule ((if inEnv then mkEnv e else id) (TC.emptyEnv (modules e))) t
-            liftIO $ forM_ msgs $ putStrLn . render
-            return x
-
-load :: String -> FilePath -> Loader C.ModuleState
-load prefix f = do
-  liftIO $ putStrLn $ "Loading: " ++ f
-  ms <- modules <$> get
-  case lookup f ms of
-    Just C.Loading -> return $ C.Failed "cycle in imports"
-    Just r@(C.Loaded _ _) -> return r
-    Just (C.Failed err) -> return (C.Failed err)
-    Nothing -> do
-      let fname = (prefix FP.</> f <.> "tt")
-      b <- liftIO $ doesFileExist fname
-      res <- if not b
-        then return $ C.Failed $ sep ["file not found: ", fromString fname]
-        else do
-          s <- liftIO $ readFile fname
-          loadExpression False prefix f s
-      modify (\e -> e {modules = (f,res):modules e})
-      return res
 
 help :: String
 help = "\nAvailable commands:\n" ++

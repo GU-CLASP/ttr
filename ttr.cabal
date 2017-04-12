@@ -22,4 +22,4 @@ executable ttr
   build-tools:         alex, happy
   default-language:    Haskell98
   hs-source-dirs:      .
-  other-modules:       TT, Concrete, Eval, Pretty, TypeChecker
+  other-modules:       TT, Concrete, Eval, Pretty, TypeChecker, Loader
