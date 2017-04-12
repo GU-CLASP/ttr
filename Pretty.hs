@@ -41,7 +41,9 @@ x </> y  = Pretty.sep [x,y]
 infixr 6 <+>
 
 instance IsString D where
-  fromString = return . text
+  fromString = Pretty.text
+
+text = return . PC.text
 
 namesFrom :: [Char] -> [[Char]]
 namesFrom xs = [x ++ n | n <- "":map show [(1::Int)..], x <- map (:[]) xs]

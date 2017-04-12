@@ -9,7 +9,10 @@ let nixpkgs_source =
   nixpkgs' = (import nixpkgs_source){};
 in with nixpkgs'.pkgs;
 let
- hp = haskell.packages.${compiler};
+ hp = haskell.packages.${compiler}.override{
+    overrides = self: super: {
+      pretty-compact = self.callPackage ./pretty-compact.nix {};
+      };};
  ghc = hp.ghcWithPackages (ps: with ps; [array base containers gasp mtl pretty-compact transformers ghcjs-dom]);
 in
 pkgs.stdenv.mkDerivation {
