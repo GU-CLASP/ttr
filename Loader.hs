@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-module Loader (load, loadExpression, Loader, InterpState(..), initState) where
+module Loader (load, loadExpression, Loader, ModuleReader, InterpState(..), initState) where
 
 import Data.String
 import Control.Monad.Trans.State.Strict
@@ -26,8 +26,9 @@ initState = IS id [] []
 lexer :: String -> [Token]
 lexer = resolveLayout True . myLexer
 
+type ModuleReader = String -> IO (Either D String)
 
-loadExpression :: Bool -> String -> String -> String -> StateT InterpState IO C.ModuleState
+loadExpression :: Bool -> ModuleReader -> String -> String -> StateT InterpState IO C.ModuleState
 loadExpression inEnv prefix f s = do
   let ts = lexer s
   case pExp ts of
@@ -43,7 +44,8 @@ loadExpression inEnv prefix f s = do
             liftIO $ forM_ msgs $ putStrLn . render
             return x
 
-load :: String -> FilePath -> Loader C.ModuleState
+
+load :: ModuleReader -> FilePath -> Loader C.ModuleState
 load prefix f = do
   liftIO $ putStrLn $ "Loading: " ++ f
   ms <- modules <$> get
@@ -52,16 +54,12 @@ load prefix f = do
     Just r@(C.Loaded _ _) -> return r
     Just (C.Failed err) -> return (C.Failed err)
     Nothing -> do
-      let fname = (prefix FP.</> f <.> "tt")
-      b <- liftIO $ doesFileExist fname
-      res <- if not b
-        then return $ C.Failed $ sep ["file not found: ", fromString fname]
-        else do
-          s <- liftIO $ readFile fname
-          loadExpression False prefix f s
+      mText <- liftIO (prefix f)
+      res <- case mText of
+        Left err -> return $ C.Failed $ sep [hang 2 "module not loaded:" (fromString f), hang 2 "because:" err]
+        Right s -> loadExpression False prefix f s
       modify (\e -> e {modules = (f,res):modules e})
       return res
-
 
 
 showTree :: (Show a, Print a) => a -> IO ()

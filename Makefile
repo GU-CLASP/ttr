@@ -1,5 +1,6 @@
 js: *.hs Exp/Par.hs Exp/Lex.hs
 	nix-shell ghcjs/shell.nix --run "ghcjs --make JS"
+		cp examples/*.tt JS.jsexe
 
 bnfc: Exp/Lex.x
 

@@ -13,6 +13,7 @@ import System.FilePath hiding ((</>))
 import System.Environment
 import System.Console.GetOpt
 import System.Console.Haskeline
+import qualified System.FilePath as FP
 
 import qualified TypeChecker as TC
 import qualified TT as C
@@ -60,7 +61,7 @@ main = do
          return ()
        [f] -> do
          putStrLn $ "Loading " ++ show f
-         let p = initLoop flags (dropFileName f) (dropExtension (takeFileName f))
+         let p = initLoop flags (moduleFileReader (dropFileName f)) (dropExtension (takeFileName f))
          _ <- runStateT (runInputT settings p) initState
          return ()
        _   -> putStrLn $ "Input error: zero or one file expected\n\n" ++
@@ -68,8 +69,16 @@ main = do
     (_,_,errs) -> putStrLn $ "Input error: " ++ concat errs ++ "\n" ++
                              usageInfo usage options
 
+moduleFileReader prefix f = do
+  let fname = prefix FP.</> f <.> "tt"
+  b <- doesFileExist fname
+  if not b
+    then return $ Left $ sep ["file not found: ", text fname]
+    else Right <$> readFile fname
+
+
 -- Initialize the main loop
-initLoop :: [Flag] -> FilePath -> FilePath -> Interpreter ()
+initLoop :: [Flag] -> ModuleReader -> FilePath -> Interpreter ()
 initLoop flags prefix f = do
   -- Parse and type-check files
   res <- lift (load prefix f)
@@ -81,7 +90,7 @@ initLoop flags prefix f = do
       go v t
   loop flags prefix f
 
--- setTcEnv :: MonadState InterpState m => [String] -> (TC.TEnv -> TC.TEnv) -> m ()
+setTcEnv :: Monad m => [String] -> (TC.TEnv -> TC.TEnv) -> StateT InterpState m ()
 setTcEnv ns mk = modify (\st -> st {mkEnv = mk, names = ns})
 
 go :: C.Val -> C.Val -> Interpreter ()
@@ -94,7 +103,7 @@ go _ t = outputStrLn $ "Module does not have a record type, but instead:\n" ++ s
 
 
 -- The main loop
-loop :: [Flag] -> FilePath -> FilePath -> Interpreter ()
+loop :: [Flag] -> ModuleReader -> FilePath -> Interpreter ()
 loop flags prefix f = do
   let cont = loop flags prefix f
   input <- getInputLine prompt
