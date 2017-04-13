@@ -1,7 +1,11 @@
 *~
+\#*#
 dist
 dist-*
 cabal-dev
+*.jsexe
+*.js_o
+*.js_hi
 *.o
 *.hi
 *.chi
@@ -25,3 +29,5 @@ cabal.sandbox.config
 .styx/
 cabal.project.local
 /Exp
+.DS_Store
+*.pdf
