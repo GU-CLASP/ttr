@@ -16,7 +16,7 @@ import qualified Data.Map as M
 -- | Pretty printing combinators. Use the same names as in the pretty library.
 
 type Sho a = Reader (M.Map String Int) a
-type D = Sho Doc
+type D = Sho (Doc ())
 
 
 withVar :: String -> (String -> Sho a) -> Sho a
