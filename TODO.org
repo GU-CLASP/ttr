@@ -1,3 +1,6 @@
+* Bugfixes
+- repair :reload
+
 * Possible improvements
 ** make convertibility <-> mutual subtype
 
