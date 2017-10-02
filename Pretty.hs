@@ -29,9 +29,6 @@ withVar s k = do
 (<+>) :: D -> D -> D
 (<+>)  = liftM2 (PC.<+>)
 
-(<|>) :: D -> D -> D
-(<|>)  = liftM2 (PC.<|>)
-
 ($$) :: D -> D -> D
 ($$)  = liftM2 (PC.$$)
 

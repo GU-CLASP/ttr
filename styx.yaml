@@ -4,7 +4,7 @@ local-packages:
   # pretty-compact:
   #   location: ../../prettiest/
 
-# source-deps:
-#   pretty-compact:
-#     location: https://github.com/jyp/prettiest.git
-
+source-deps:
+  pretty-compact:
+    location: https://github.com/jyp/prettiest.git
+    revision: d24b3d5ccbd185eb8458133f80f1eb5570c3ecbe
