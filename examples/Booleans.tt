@@ -1,0 +1,9 @@
+module
+
+Bool : Type
+Bool = {'true [] | 'false []}
+
+IsTrue : Bool -> Type
+IsTrue = split
+       	 'true _ -> []
+	 'false _ -> {}
