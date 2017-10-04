@@ -45,11 +45,11 @@ coercions Exp 6 ;
 separator Exp "," ;
 
 -- Branches
-Branch.   Branch ::= AIdent AIdent "->" ExpWhere ;
+Branch.   Branch ::= "'" AIdent AIdent "->" ExpWhere ;
 separator Branch ";" ;
 
 -- Labelled sum alternatives
-Label.    Label   ::= AIdent Exp ;
+Label.    Label   ::= "'" AIdent Exp ;
 separator Label "|" ;
 
 -- Nonempty telescopes with Exp:s, this is hack to avoid ambiguities
