@@ -20,6 +20,7 @@ import qualified TT as C
 import qualified Eval as E
 import Pretty
 import Loader
+import DialogMan (dialogMan)
 
 type Interpreter a = InputT Loader a
 
@@ -69,6 +70,7 @@ main = do
     (_,_,errs) -> putStrLn $ "Input error: " ++ concat errs ++ "\n" ++
                              usageInfo usage options
 
+moduleFileReader :: FilePath -> FilePath -> IO (Either D String)
 moduleFileReader prefix f = do
   let fname = prefix FP.</> f <.> "tt"
   b <- doesFileExist fname
@@ -89,6 +91,8 @@ initLoop flags prefix f = do
       outputStrLn "File loaded."
       go v t
   loop flags prefix f
+
+
 
 setTcEnv :: Monad m => [String] -> (TC.TEnv -> TC.TEnv) -> StateT InterpState m ()
 setTcEnv ns mk = modify (\st -> st {mkEnv = mk, names = ns})
@@ -115,6 +119,12 @@ loop flags prefix f = do
       | ' ' `elem` str -> do outputStrLn "Only one file allowed after :l"
                              cont
       | otherwise      -> initLoop flags prefix str
+    Just (':':'d':' ':str)
+      | ' ' `elem` str -> do outputStrLn "Only one file allowed after :x"
+                             cont
+      | otherwise      -> do
+          dialogMan prefix str
+          cont
     Just (':':'c':'d':' ':str) -> do liftIO (setCurrentDirectory str)
                                      cont
     Just ":h"  -> outputStrLn help >> cont
