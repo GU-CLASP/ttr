@@ -1,16 +1,22 @@
 \(params : [ Ind : Type
            ; spkr0 : Ind
            ; addr0 : Ind
+           ; Move : Type
+           ; greet : Move
            ; ]) ->
 
 module
 
+open import Lists
 open params
 
+
+greeting : [spkr : Ind; addr : Ind; moves : List Move] -> [spkr : Ind; addr : Ind; moves : List Move]
+greeting r = (spkr = r.addr, addr = r.spkr, moves = 'cons (head = greet, tail = r.moves))
 
 turn_change : [spkr : Ind; addr : Ind] -> [spkr : Ind; addr : Ind]
 turn_change r = (spkr = r.addr, addr = r.spkr)
 
-initialize : [] -> [spkr : Ind; addr : Ind]
-initialize _ = (spkr = spkr0, addr = addr0)
+initialize : [] -> [spkr : Ind; addr : Ind; moves : List Move]
+initialize _ = (spkr = spkr0, addr = addr0, moves = 'nil ())
 
