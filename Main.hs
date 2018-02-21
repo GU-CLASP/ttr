@@ -134,7 +134,7 @@ loop flags prefix f = do
         C.Failed err -> outputStrLn (render err)
         C.Loaded v typ -> do
           outputStrLn (render ("TYPE:" </> pretty typ))
-          liftIO $ putStrLn (render ("EVAL:" </> pretty v))
+          outputStrLn (render ("EVAL:" </> pretty v))
       cont
 
 
