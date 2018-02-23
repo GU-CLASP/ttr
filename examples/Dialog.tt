@@ -3,7 +3,7 @@
            ; addr0 : Ind
            ; IllocProp : Type
            ; Greet : Ind -> Ind -> IllocProp
---	   ; countergreet : Move
+	   ; CounterGreet : Ind -> Ind -> IllocProp
            ; ]) ->
 
 module
@@ -16,19 +16,30 @@ open params
 --TODO: latestMove_content should be added automatically into moves
 --TODO: and finally! let's look into IllocProp
 greeting : [spkr : Ind;
-	    addr : Ind; 
-	    moves : List IllocProp]
-	    -> [spkr : Ind; 
-	        addr : Ind; 
-		moves : List IllocProp;
-		latestMove : [content : IllocProp]]		
+	    addr : Ind;
+	    moves : (List IllocProp) (= 'nil ())]
+	    -> [spkr : Ind;
+	        addr : Ind;
+		moves : List IllocProp ;
+		latestMove : [content : IllocProp]]
 greeting r = (spkr = r.spkr,
 	      addr = r.addr,
 	      moves = 'cons (head = Greet r.spkr r.addr, tail = r.moves),
 	      latestMove = (content= Greet r.spkr r.addr))
 
--- countergreeting : [spkr : Ind; addr : Ind; latestMove : Greet _ _] -> [spkr : Ind; addr : Ind; moves : List Move; latestMove : countergreet]
--- countergreeting r = (spkr = r.addr, addr = r.spkr, moves = 'cons (head = CounterGreet r.spkr r.addr, tail = r.moves), latestMove = CounterGreet r.spkr r.addr)
+countergreeting : [ spkr : Ind
+                  ; addr : Ind
+   		  ; moves : List IllocProp
+                  ; latestMove : [content : IllocProp (= Greet spkr addr)]
+                  ]
+                  -> [spkr : Ind;
+                      addr : Ind;
+                      moves : List IllocProp;
+                      latestMove : [content : IllocProp]]
+countergreeting r = (spkr = r.addr,
+                     addr = r.spkr,
+                     moves = 'cons (head = CounterGreet r.spkr r.addr, tail = r.moves),
+                     latestMove = (content = CounterGreet r.spkr r.addr))
 
 turn_change : [spkr : Ind; addr : Ind] -> [spkr : Ind; addr : Ind]
 turn_change r = (spkr = r.addr, addr = r.spkr)
