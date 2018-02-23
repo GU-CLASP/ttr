@@ -1,8 +1,9 @@
 \(params : [ Ind : Type
            ; spkr0 : Ind
            ; addr0 : Ind
-           ; Move : Type
-           ; greet : Move
+           ; IllocProp : Type
+           ; Greet : Ind -> Ind -> IllocProp
+--	   ; countergreet : Move
            ; ]) ->
 
 module
@@ -11,12 +12,28 @@ open import Lists
 open params
 
 
-greeting : [spkr : Ind; addr : Ind; moves : List Move] -> [spkr : Ind; addr : Ind; moves : List Move]
-greeting r = (spkr = r.addr, addr = r.spkr, moves = 'cons (head = greet, tail = r.moves))
+--TODO: greeting should be applied only if moves are empty
+--TODO: latestMove_content should be added automatically into moves
+--TODO: and finally! let's look into IllocProp
+greeting : [spkr : Ind;
+	    addr : Ind; 
+	    moves : List IllocProp]
+	    -> [spkr : Ind; 
+	        addr : Ind; 
+		moves : List IllocProp;
+		latestMove : [content : IllocProp]]		
+greeting r = (spkr = r.spkr,
+	      addr = r.addr,
+	      moves = 'cons (head = Greet r.spkr r.addr, tail = r.moves),
+	      latestMove = (content= Greet r.spkr r.addr))
+
+-- countergreeting : [spkr : Ind; addr : Ind; latestMove : Greet _ _] -> [spkr : Ind; addr : Ind; moves : List Move; latestMove : countergreet]
+-- countergreeting r = (spkr = r.addr, addr = r.spkr, moves = 'cons (head = CounterGreet r.spkr r.addr, tail = r.moves), latestMove = CounterGreet r.spkr r.addr)
 
 turn_change : [spkr : Ind; addr : Ind] -> [spkr : Ind; addr : Ind]
 turn_change r = (spkr = r.addr, addr = r.spkr)
 
-initialize : [] -> [spkr : Ind; addr : Ind; moves : List Move]
+initialize : [] -> [spkr : Ind; addr : Ind; moves : List IllocProp]
 initialize _ = (spkr = spkr0, addr = addr0, moves = 'nil ())
+
 
