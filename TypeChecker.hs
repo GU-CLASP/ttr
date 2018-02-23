@@ -165,6 +165,10 @@ checkLogg v t = logg (sep ["Checking that " <> pretty t, "has type " <> pretty v
 
 check :: Val -> Ter -> Typing CTer
 check a t = case (a,t) of
+  (VSingleton s u,_) -> do
+    (t',t'') <- checkEval s t
+    checkConv "singleton" t'' u
+    return t'
   (_,Con c e) -> do
     (b,nu) <- getLblType c a
     Con c <$> check (eval nu b) e
@@ -233,6 +237,14 @@ checkSub msg a v = do
       Just err -> do
         oops $ sep [hang 2 msg (pretty v), hang 2 "is not a subtype of" (pretty a), hang 2 "because" err]
 
+checkConv :: D -> Val -> Val -> Typing ()
+checkConv msg a v = do
+    k <- index <$> ask
+    case conv k v a of
+      Nothing -> return ()
+      Just err -> do
+        oops $ sep [hang 2 msg (pretty v), hang 2 "is convertible to " (pretty a), hang 2 "because" err]
+
 checkType :: Ter -> Typing CTer
 checkType t = do
   (t',a) <- relax zero (checkInfer t)
@@ -266,6 +278,10 @@ checkInfer e = case e of
     return (Module (map fst dss),VRecordT tele)
   Real x -> return (Real x, real)
   Prim p -> return (Prim p,lkPrimTy p)
+  Singleton a b -> do
+    (aa,a') <- checkTypeEval a
+    b' <- check a' b
+    return (Singleton aa b', VU)
   Pi x' rig a (Lam x _ b) -> do
     (aa,a') <- checkTypeEval a
     b' <- withLocal (x,zero,a') $ checkType b

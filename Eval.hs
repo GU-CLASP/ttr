@@ -62,6 +62,7 @@ eval _ (Prim nm)       = lkPrim nm
 eval _ (Import _ v)    = v
 eval e (Meet t u)      = vMeet (eval e t) (eval e u)
 eval e (Join t u)      = vJoin (eval e t) (eval e u)
+eval e (Singleton t u) = VSingleton (eval e t) (eval e u)
 
 abstract :: String -> [Val] -> Val
 abstract x = foldl app (VAbstract x)
@@ -210,7 +211,6 @@ equal a b = satisfy (a == b) (fromJust $ different a b)
 
 included :: (Pretty a, Ord a) => a -> a -> Maybe D
 included a b = satisfy (a <= b) (sep [pretty a,"⊈",pretty b])
- 
 
 different :: (Pretty a) => a -> a -> Maybe D
 different a b = Just (sep [pretty a,"≠",pretty b])
@@ -221,6 +221,7 @@ noSub a b = Just $ sep [pretty a,"not a subtype of",pretty b]
 -- | @conv k a b@ Checks that @a@ can be converted to @b@.
 conv :: Int -> Val -> Val -> Maybe D
 conv _ VU VU = Nothing
+conv k (VSingleton t v) (VSingleton t' v') = conv k t t' <> conv k v v'
 conv k (VLam _ f) (VLam _ g) = do
   let v = mkVar k
   conv (k+1) (f v) (g v)
@@ -274,6 +275,8 @@ sub k (VJoin a b) c = sub k a c <> sub k b c
 sub k c (VJoin a b) = sub k c a `orElse` sub k c b
 sub k c (VMeet a b) = sub k c a <> sub k c b
 sub k (VMeet a b) c = sub k a c `orElse` sub k b c
+sub k (VSingleton t v) (VSingleton t' v') = sub k t t' <> conv k v v'
+sub k (VSingleton t _) c = sub k t c
 sub k x x' = conv k x x'
 
 orElse :: Maybe D -> Maybe D -> Maybe D
@@ -333,6 +336,7 @@ showVal ctx t0 = case t0 of
     hang 0 ("\\" <> pretty v <+> "->") (p (f $ VVar v))
   (VPrim _ nm) -> pretty nm
   (VAbstract nm) -> pretty ('#':nm)
+  (VSingleton t v) -> pretty t <> "(= " <> pretty v <> ")"
  where pp :: Int -> ((Val -> D) -> D) -> D
        pp opPrec k = prn opPrec (k (showVal opPrec))
        prn opPrec = (if opPrec < ctx then parens else id)
@@ -413,6 +417,7 @@ showTer ctx ρ t0 = case t0 of
    (Undef _)     -> "undefined (1)"
    (Real r)      -> showy r
    (Prim n)      -> showy n
+   (Singleton t v) -> showTer ctx ρ t <> "(= " <> showTer 0 ρ v <> ")"
  where pp :: Int -> ((Ter' a -> D) -> D) -> D
        pp opPrec k = prn opPrec (k (showTer opPrec ρ))
        prn opPrec = (if opPrec < ctx then parens else id)
@@ -461,6 +466,7 @@ instance Value Val where
     VJoin x y -> unknowns x ++ unknowns y
     VVar x -> [x]
     Ter _ env -> unknowns env
+    VSingleton t u -> unknowns t ++ unknowns u
 
 instance Value Env where
   unknowns Empty = []

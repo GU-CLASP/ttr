@@ -91,6 +91,7 @@ data Ter' a = App (Ter' a) (Ter' a)
             | Real Double
             | Meet (Ter' a) (Ter' a)
             | Join (Ter' a) (Ter' a)
+            | Singleton (Ter' a) (Ter' a)
 
   deriving (Eq)
 
@@ -188,6 +189,7 @@ data Val = VU
          | VAbstract String
          | VMeet Val Val
          | VJoin Val Val
+         | VSingleton Val Val
   -- deriving Eq
 
 mkVar :: Int -> Val
@@ -198,7 +200,7 @@ isNeutral (VAbstract _) = True
 isNeutral (VApp u _)   = isNeutral u
 isNeutral (VSplit _ v) = isNeutral v
 isNeutral (VVar _)     = True
-isNeutral (VProj _ v)     = isNeutral v
+isNeutral (VProj _ v)  = isNeutral v
 isNeutral _            = False
 
 --------------------------------------------------------------------------------

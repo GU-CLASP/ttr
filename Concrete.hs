@@ -132,6 +132,7 @@ resolveExp (PrimOp p) = return (C.Prim p)
 resolveExp (And t u) = C.Meet <$> resolveExp t <*> resolveExp u
 resolveExp (Or t u) = C.Join <$> resolveExp t <*> resolveExp u
 resolveExp (Con (AIdent (_,n)) t) = C.Con n <$> resolveExp t
+resolveExp (Singleton t u) = C.Singleton <$> resolveExp t <*> resolveExp u
 resolveExp (Sum labs) = do
   labs' <- mapM resolveLabel labs
   loc <- getLoc (case labs of Label (AIdent (l,_)) _:_ -> l ; _ -> (0,0))
@@ -176,7 +177,7 @@ resolveMutuals decls = do
     when (names /= map fst rddecls) $
       throwError $ "Mismatching names in" <+> showy decls
     rtdecls <- resolveTele tdecls
-    return ([ (x,t,d) | (x,r,t) <- rtdecls | (_,d) <- rddecls ])
+    return ([ (x,t,d) | (x,_r,t) <- rtdecls | (_,d) <- rddecls ])
   where
     idents = [ x | DeclType x _ <- decls ]
     names  = [ unAIdent x | x <- idents ]
