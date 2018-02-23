@@ -289,18 +289,18 @@ convEnv k e e' = mconcat $ zipWith (conv k) (valOfEnv e) (valOfEnv e')
 
 convTele :: Int -> VTele -> VTele -> Maybe D
 convTele _ VEmpty VEmpty = Nothing
-convTele k (VBind l r a t) (VBind l' r' a' t') = do
+convTele k (VBind (l,_) r a t) (VBind (l',_) r' a' t') = do
   let v = mkVar k
   equal r r' <> equal l l' <> conv k a a' <> convTele (k+1) (t v) (t' v)
 convTele _ x x' = different x x'
 
 subTele :: Int -> VTele -> VTele -> Maybe D
 subTele _ _ VEmpty = Nothing  -- all records are a subrecord of the empty record
-subTele k (VBind l r a t) (VBind l' r' a' t') = do
+subTele k (VBind (l,_ll) r a t) (VBind (l',ll') r' a' t') = do
   let v = mkVar k
   if l == l'
     then included r r' <> sub k a a' <> subTele (k+1) (t v) (t' v)
-    else subTele (k+1) (VBind l r a t) (t' v)
+    else subTele (k+1) (t v) (VBind (l',ll') r' a' t') 
 subTele _ x x' = noSub x x'
 -- FIXME: Subtyping of records isn't complete. To be complete, one
 -- would have to create a graph representation of the dependencies in
