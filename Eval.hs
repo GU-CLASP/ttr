@@ -215,8 +215,9 @@ included a b = satisfy (a <= b) (sep [pretty a,"⊈",pretty b])
 different :: (Pretty a) => a -> a -> Maybe D
 different a b = Just (sep [pretty a,"≠",pretty b])
 
-noSub :: (Pretty a) => a -> a -> Maybe D
-noSub a b = Just $ sep [pretty a,"not a subtype of",pretty b]
+noSub :: (Pretty a2, Pretty a, Pretty a1) =>
+               a2 -> a1 -> a -> Maybe D
+noSub z a b = Just $ sep [pretty a,"not a subtype of",pretty b,"when inhabitant is",pretty z]
 
 -- | @conv k a b@ Checks that @a@ can be converted to @b@.
 conv :: Int -> Val -> Val -> Maybe D
@@ -264,20 +265,21 @@ conv k (VMeet a b) (VMeet a' b') = (conv k a a' <> conv k b b') `orElse` (conv k
 conv _ (VPrim _ _) (VPrim _ _) = Nothing
 conv _ x              x'           = different x x'
 
--- @sub _ a b@: check that a is a subtype of b.
-sub :: Int -> Val -> Val -> Maybe D
-sub _ VU VU = Nothing
-sub k (VPi _ r u v) (VPi _ r' u' v') = do
+-- -- @sub _ x:a b@: check that x:a also has type b.
+sub :: Int -> Val -> Val -> Val -> Maybe D
+sub _ _ VU VU = Nothing
+sub k f (VPi _ r u v) (VPi _ r' u' v') = do
   let w = mkVar k
-  included r' r <> sub k u' u  <> sub (k+1) (app v w) (app v' w)
-sub k (VRecordT fs) (VRecordT fs') = subTele k fs fs'
-sub k (VJoin a b) c = sub k a c <> sub k b c
-sub k c (VJoin a b) = sub k c a `orElse` sub k c b
-sub k c (VMeet a b) = sub k c a <> sub k c b
-sub k (VMeet a b) c = sub k a c `orElse` sub k b c
-sub k (VSingleton t v) (VSingleton t' v') = sub k t t' <> conv k v v'
-sub k (VSingleton t _) c = sub k t c
-sub k x x' = conv k x x'
+  included r' r <> sub k w u' u  <> sub (k+1) (app f w) (app v w) (app v' w)
+sub k z (VRecordT fs) (VRecordT fs') = subTele k z fs fs'
+sub k x (VJoin a b) c = sub k x a c <> sub k x b c
+sub k x c (VJoin a b) = sub k x c a `orElse` sub k x c b
+sub k x c (VMeet a b) = sub k x c a <> sub k x c b
+sub k x (VMeet a b) c = sub k x a c `orElse` sub k x b c
+sub k x (VSingleton t v) t' = sub k x t t' `orElse` sub k v t t'
+sub k x t (VSingleton t' v') = sub k x t t' <> conv k x v'
+sub k _ x x' = conv k x x'
+
 
 orElse :: Maybe D -> Maybe D -> Maybe D
 orElse Nothing _ = Nothing
@@ -294,14 +296,14 @@ convTele k (VBind (l,_) r a t) (VBind (l',_) r' a' t') = do
   equal r r' <> equal l l' <> conv k a a' <> convTele (k+1) (t v) (t' v)
 convTele _ x x' = different x x'
 
-subTele :: Int -> VTele -> VTele -> Maybe D
-subTele _ _ VEmpty = Nothing  -- all records are a subrecord of the empty record
-subTele k (VBind (l,_ll) r a t) (VBind (l',ll') r' a' t') = do
-  let v = mkVar k
+subTele :: Int -> Val -> VTele -> VTele -> Maybe D
+subTele _ _ _ VEmpty = Nothing  -- all records are a subrecord of the empty record
+subTele k z (VBind (l,_ll) r a t) (VBind (l',ll') r' a' t') = do
+  let v = projVal l z
   if l == l'
-    then included r r' <> sub k a a' <> subTele (k+1) (t v) (t' v)
-    else subTele (k+1) (t v) (VBind (l',ll') r' a' t') 
-subTele _ x x' = noSub x x'
+    then included r r' <> sub k v a a' <> subTele (k+1) z (t v) (t' v)
+    else subTele (k+1) z (t v) (VBind (l',ll') r' a' t')
+subTele _ z x x' = noSub z x x'
 -- FIXME: Subtyping of records isn't complete. To be complete, one
 -- would have to create a graph representation of the dependencies in
 -- a record, and then check the covering of the graphs.

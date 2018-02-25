@@ -32,7 +32,7 @@ gatherRules ((_name',v):vs) (VBind name _ t restTele) =
 tryApplyRule :: (Binder,Val,Val) -> (Val,Val) -> Maybe (Val,Binder,Val,Val)
 tryApplyRule (binder,ruleVal,ruleType) (stateVal,stateType) =
   case ruleType of
-    (VPi _nm _r a f) -> case sub 0 stateType a of
+    (VPi _nm _r a f) -> case sub 0 stateVal stateType a of
       Just _ -> Nothing
       Nothing -> Just (ruleType,binder,ruleVal `app` stateVal,
                        f `app` stateVal)

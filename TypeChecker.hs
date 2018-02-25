@@ -145,6 +145,7 @@ checkDecls (Mutual d) = do
   let d' = zipWith (\(b,_r,ty) t -> (b,ty,t)) tele' ters'
   return (Mutual d',(map (eval (PDef (zip (map frst tele) ters') e)) ters', vtele)) -- allowing recursive definitions
 
+frst :: (t2, t1, t) -> t2
 frst (x,_,_) = x
 
 checkDeclss :: [TDecls ()] -> Typing [(TDecls Val,Recordoid)]
@@ -163,6 +164,7 @@ checkTele ((x,r,a):xas) = do
 checkLogg :: Val -> Ter -> Typing CTer
 checkLogg v t = logg (sep ["Checking that " <> pretty t, "has type " <> pretty v]) $ check v t
 
+-- Check that t has type has type a and evaluate t.
 check :: Val -> Ter -> Typing CTer
 check a t = case (a,t) of
   (VSingleton s u,_) -> do
@@ -172,7 +174,7 @@ check a t = case (a,t) of
   (_,Con c e) -> do
     (b,nu) <- getLblType c a
     Con c <$> check (eval nu b) e
-  (VU,Sum loc bs) -> Sum loc <$> forM bs (\(l,a) -> (l,) <$> checkType a)
+  (VU,Sum loc bs) -> Sum loc <$> forM bs (\(l,aa) -> (l,) <$> checkType aa)
   (VPi x r (Ter (Sum _ cas) nu) f,Split loc ces) -> do
     let cas' = sortBy (compare `on` fst . fst) cas
         ces' = sortBy (compare `on` fst) ces
@@ -186,7 +188,7 @@ check a t = case (a,t) of
     var <- getFresh
     (a',aa') <- case aa of
       Just aaa -> do (aa',a') <- checkTypeEval aaa
-                     checkSub "lam type" a' a
+                     checkSub "lam type" var a' a
                      return (a',Just aa')
       Nothing -> return (a,Nothing)
     Lam x aa' <$> withLocal (x,r,a') (check (app f var) t)
@@ -205,7 +207,8 @@ check a t = case (a,t) of
   _ -> do
     logg (sep ["Checking that" <+> pretty t, "has type" <+> pretty a]) $ do
        (t',v) <- checkInfer t
-       checkSub "inferred type" a v
+       e <- asks env
+       checkSub "inferred type" (eval e t') a v
        return t'
 
 -- | Check that a record has a given type
@@ -229,13 +232,13 @@ checkTypeEval t = do
   e <- asks env
   return (t',eval e t')
 
-checkSub :: D -> Val -> Val -> Typing ()
-checkSub msg a v = do
+checkSub :: D -> Val -> Val -> Val -> Typing ()
+checkSub msg z a v = do
     k <- index <$> ask
-    case sub k v a of
+    case sub k z v a of
       Nothing -> return ()
       Just err -> do
-        oops $ sep [hang 2 msg (pretty v), hang 2 "is not a subtype of" (pretty a), hang 2 "because" err]
+        oops $ sep [hang 2 msg (pretty v), hang 2 "is not a subtype of" (pretty a), hang 2 "because" err, hang 2 "with element" (pretty z)]
 
 checkConv :: D -> Val -> Val -> Typing ()
 checkConv msg a v = do
@@ -245,6 +248,7 @@ checkConv msg a v = do
       Just err -> do
         oops $ sep [hang 2 msg (pretty v), hang 2 "is convertible to " (pretty a), hang 2 "because" err]
 
+-- Check that t is a type and evaluate it.
 checkType :: Ter -> Typing CTer
 checkType t = do
   (t',a) <- relax zero (checkInfer t)
@@ -256,7 +260,7 @@ unsafeInfer :: TEnv -> Ter -> Val
 unsafeInfer e t = case (runInfer e t) of
   (Right (_,v),_) -> v
 
--- | Infer the type of the argument
+-- | Infer the type of the argument, and evaluate it.
 checkInfer :: Ter -> Typing (CTer,Val)
 checkInfer e = case e of
   Lam b@(x,_) (Just a) t -> do
@@ -324,6 +328,9 @@ checkInferApp :: Ter -> {- argument -}
 checkInferApp u (VPi _ r a f) = do
    (u',u'') <- relax r (checkEval a u)
    return (u', app f u'')
+-- checkInferApp u (VSingleton t v) = do
+--    (u',u'') <- checkInferApp u t
+--    return (u', VSingleton u'' (app v (eval u')))
 checkInferApp u (VJoin x y) = do
   (u',typ1) <- checkInferApp u x
   (_ ,typ2) <- checkInferApp u y

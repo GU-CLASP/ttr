@@ -8,20 +8,33 @@ IsTrue = split
        	 'true _ -> []
 	 'false _ -> {}
 
-true : Bool (= 'true ())
+true : Bool
 true = 'true ()
 
+true2 : Bool (= 'true ())
+true2 = true
 
 not : Bool -> Bool
 not = split
        	 'true _ -> 'false ()
 	 'false _ -> 'true ()
 
+id : Bool -> Bool
+id x = x
+
 not2 : (Bool -> Bool) (= not)
 not2 = not
 
 not3 : (x : Bool) -> Bool (= not x)
-not3 = not
+not3 x = not x
+
+rec : [a : Bool]
+rec = (a = true)
+
+rec2 : [a : Bool (= true)]
+rec2 = rec
+
+
 
 -- false : Bool (= 'true ())
 -- false = 'false ()
