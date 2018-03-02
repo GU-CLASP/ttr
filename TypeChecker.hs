@@ -165,6 +165,9 @@ checkLogg :: Val -> Ter -> Typing CTer
 checkLogg v t = logg (sep ["Checking that " <> pretty t, "has type " <> pretty v]) $ check v t
 
 -- Check that t has type has type a and evaluate t.
+
+-- TODO: sometimes, checking will yield a more precise (subtype),
+-- which should also be returned by this function.
 check :: Val -> Ter -> Typing CTer
 check a t = case (a,t) of
   (VSingleton s u,_) -> do
