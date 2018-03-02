@@ -1,0 +1,16 @@
+\(params :
+           [ Ind   : Type
+            ]) -> module
+	    
+open params
+open import Lists
+
+Move : Type
+Move = [ spkr    : Ind
+       ; addr    : Ind
+       ; content : [] ]  -- join of all the possible move contents
+
+InformationState : Type
+InformationState = [ private : [ agenda     : List Move ]
+		   ; dgb     : [ moves      : List Move
+		     	       ; latestMove : Move ]]

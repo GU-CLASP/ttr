@@ -1,50 +1,36 @@
 \(params : [ Ind : Type
-           ; spkr0 : Ind
-           ; addr0 : Ind
-           ; IllocProp : Type
-           ; Greet : Ind -> Ind -> IllocProp
-	   ; CounterGreet : Ind -> Ind -> IllocProp
-           ; ]) ->
+           ; user0 : Ind
+           ; agent : Ind
+           ; greet : Ind -> Ind -> Type
+	   ; sg    : (s:Ind) -> (a:Ind) -> greet s a
+	   ; sg'   : greet agent user0
+	   ; emptyMove : [ spkr    : Ind
+	     	         ; addr    : Ind
+			 ; content : [] ]
+           ; ]) -> module
 
-module
-
-open import Lists
+open import Lists	
+open import Kos params
 open params
 
+countergreeting : InformationState /\ [ dgb : [ moves      : List Move
+                          ; latestMove : [ spkr    : Ind 
+			    	       	 ; addr    : Ind (= agent)
+			    	       	 ; content : [c : greet spkr addr]]]]
+                  -> InformationState
+countergreeting r = ( private = ( agenda = 'cons (head = ( spkr = agent
+  		      		       	     	       	 , addr = user0
+						     	 , content = (c = sg')),
+						  tail = r.private.agenda ))
+                    , dgb = r.dgb )
 
---TODO: greeting should be applied only if moves are empty
---TODO: latestMove_content should be added automatically into moves
---TODO: and finally! let's look into IllocProp
-greeting : [spkr : Ind;
-	    addr : Ind;
-	    moves : (List IllocProp) (= 'nil ())]
-	    -> [spkr : Ind;
-	        addr : Ind;
-		moves : List IllocProp ;
-		latestMove : [content : IllocProp]]
-greeting r = (spkr = r.spkr,
-	      addr = r.addr,
-	      moves = 'cons (head = Greet r.spkr r.addr, tail = r.moves),
-	      latestMove = (content= Greet r.spkr r.addr))
+greeting' : InformationState -> InformationState
+greeting' s = ( private = s.private
+	       , dgb     = ( moves  = s.dgb.moves
+	       	 	   , latestMove = (spkr = user0, addr = agent,
+			     		  content = (c = sg user0 agent))))
 
-countergreeting : [ spkr : Ind
-                  ; addr : Ind
-   		  ; moves : List IllocProp
-                  ; latestMove : [content : IllocProp (= Greet spkr addr)]
-                  ]
-                  -> [spkr : Ind;
-                      addr : Ind;
-                      moves : List IllocProp;
-                      latestMove : [content : IllocProp]]
-countergreeting r = (spkr = r.addr,
-                     addr = r.spkr,
-                     moves = 'cons (head = CounterGreet r.spkr r.addr, tail = r.moves),
-                     latestMove = (content = CounterGreet r.spkr r.addr))
-
-turn_change : [spkr : Ind; addr : Ind] -> [spkr : Ind; addr : Ind]
-turn_change r = (spkr = r.addr, addr = r.spkr)
-
-initialize : [] -> [spkr : Ind; addr : Ind; moves : List IllocProp]
-initialize _ = (spkr = spkr0, addr = addr0, moves = 'nil ())
-
-
+initialize : [] -> InformationState
+initialize _ = ( private = ( agenda = 'nil ())
+	       , dgb     = ( moves  = 'nil ()
+	       	 	   , latestMove = emptyMove))

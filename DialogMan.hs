@@ -50,7 +50,7 @@ iterateRules n rules st = do
     Nothing -> outputStrLn "No rule could apply."
     Just (ruleType,binder,v,t) -> do
       outputStrLn ""
-      outputStrLn (render ("Applied rule:" </> pretty binder </> pretty ruleType) )
+      outputStrLn (render ("Applied rule:" </> pretty binder))
       outputStrLn (render ("TYPE:" </> pretty t))
       outputStrLn (render ("EVAL:" </> pretty v))
       iterateRules (n-1) rules (v,t)
