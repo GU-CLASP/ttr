@@ -9,3 +9,5 @@ Maybe a =  [ tag : Bool
 Just : Type -> Type
 Just a = [ tag : Bool (= true) ; content : a]
 
+just : (a : Type) -> a -> Just a
+just _ x = ( tag = true, content = x)
