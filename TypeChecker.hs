@@ -211,15 +211,22 @@ check a t = case (a,t) of
        checkSub "inferred type" (eval e t') a v
        return t'
 
+inferRecord :: [(String,Ter)] -> Typing [(String,CTer)]
+inferRecord [] = return []
+inferRecord ((fieldName,fieldTerm):otherFields) = do
+  (fieldValue,_fieldType) <- checkInfer fieldTerm
+  ((fieldName,fieldValue):) <$> inferRecord otherFields
+
 -- | Check that a record has a given type
 checkRecord :: VTele -> [(String,Ter)] -> Typing [(String,CTer)]
-checkRecord VEmpty _ = return [] -- other fields are ignored.
+checkRecord VEmpty ts = inferRecord ts
 checkRecord (VBind (x,l) rig a r) ts =
-  case lookup x ts of
-    Nothing -> oops $ sep ["type expects field", pretty x, "but it cannot be found in the term."]
-    Just t -> do
+  case partition ((== x) . fst) ts of
+    ([],_) -> oops $ sep ["type expects field", pretty x, "but it cannot be found in the term."]
+    ([(_,t)],otherFields) -> do
       (tt,t') <- relax rig (checkEval a t)
-      ((x,tt):) <$> checkRecord (r t') ts
+      ((x,tt):) <$> checkRecord (r t') otherFields
+    (_,_) ->  oops $ sep ["type expects field", pretty x, "and it is present several times in the term."]
 
 checkEval :: Val -> Ter -> Typing (CTer,Val)
 checkEval a t = do
