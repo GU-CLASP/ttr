@@ -9,8 +9,8 @@ List a = { 'nil [] | 'cons [head : a; tail : List a]}
 
 isNil : (a : Type) -> List a -> Bool
 isNil a = split
-      	  'nil _ -> 'true ()
-	  'cons _ -> 'false ()
+      	  'nil _ -> 'yes ()
+	  'cons _ -> 'no ()
 
 zipWith : (a b c : Type) -> (a -> b -> c) -> List a -> List b -> List c
 zipWith a b c f = zip'

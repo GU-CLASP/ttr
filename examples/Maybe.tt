@@ -1,0 +1,11 @@
+module
+open import Booleans
+
+Maybe : Type -> Type
+Maybe a =  [ tag : Bool
+           ; contents : if Type tag a []]
+
+
+Just : Type -> Type
+Just a = [ tag : Bool (= true) ; content : a]
+

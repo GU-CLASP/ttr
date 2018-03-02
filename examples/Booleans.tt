@@ -1,9 +1,20 @@
 module
 
 Bool : Type
-Bool = {'true [] | 'false []}
+Bool = {'yes [] | 'no []}
 
 IsTrue : Bool -> Type
 IsTrue = split
-       	 'true _ -> []
-	 'false _ -> {}
+       	 'yes _ -> []
+	 'no _ -> {}
+
+iffliped : (a : Type) -> a -> a -> Bool -> a
+iffliped _ x y = split
+       	 'yes _ -> x
+	 'no _ -> y
+
+if : (a : Type) -> Bool -> a -> a -> a
+if a c x y = iffliped a x y c
+
+true : Bool
+true = 'yes ()
