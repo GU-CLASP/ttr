@@ -268,6 +268,7 @@ conv _ x              x'           = different x x'
 -- -- @sub _ x:a b@: check that x:a also has type b.
 sub :: Int -> Val -> Val -> Val -> Maybe D
 sub _ _ VU VU = Nothing
+sub _ _ _ (VRecordT VEmpty) = Nothing
 sub k f (VPi _ r u v) (VPi _ r' u' v') = do
   let w = mkVar k
   included r' r <> sub k w u' u  <> sub (k+1) (app f w) (app v w) (app v' w)

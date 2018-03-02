@@ -3,7 +3,7 @@ open import Booleans
 
 Maybe : Type -> Type
 Maybe a =  [ tag : Bool
-           ; content : if Type tag a []]
+           ; content : []]
 
 
 Just : Type -> Type
@@ -19,5 +19,5 @@ checkjustSubtype : (a : Type) -> a -> Maybe a
 checkjustSubtype a x = just a x
 
 
--- checkJustSubtype : (a : Type) -> Just a -> Maybe a
--- checkJustSubtype a x = x
+checkJustSubtype : (a : Type) -> Just a -> Maybe a
+checkJustSubtype a x = x
