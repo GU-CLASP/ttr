@@ -18,3 +18,6 @@ if a c x y = iffliped a x y c
 
 true : Bool
 true = 'yes ()
+
+false : Bool
+false = 'no ()
