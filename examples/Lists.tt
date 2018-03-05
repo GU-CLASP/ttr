@@ -1,32 +1,41 @@
-let open import Booleans
-in module
+let
+    open import Booleans
+    open import Maybe
+in
+
+module
+
 
 List : Type -> Type
-List a = { 'nil [] | 'cons [head : a; tail : List a]}
+List a = [ tag : {'yes | 'no}
+         ; content : if Type tag [head : a; tail : List a] []] 
 
--- emptyList : (a : Type) -> List a
--- emptyList = 'nil ()
+ListOne : Type -> Type
+ListOne a = [head : a; tail : List a]
+
+
+emptyList : (a : Type) -> List a
+emptyList a = (tag = 'no, content = ())
 
 isNil : (a : Type) -> List a -> Bool
-isNil a = split
-      	  'nil _ -> 'yes ()
-	  'cons _ -> 'no ()
-
-zipWith : (a b c : Type) -> (a -> b -> c) -> List a -> List b -> List c
-zipWith a b c f = zip'
-  where
-    zip' : List a -> List b -> List c
-    zip' = split
-      'nil _ -> \_ -> 'nil ()
-      'cons x -> split
-        'nil _ -> 'nil ()
-        'cons y -> 'cons (head = f x.head y.head,
-                         tail = zip' x.tail y.tail)
+isNil a x = not x.tag
 
 
-foldr : (a b : Type) -> List a -> (a -> b -> b) -> b -> b
-foldr a b xs f k = go xs
-  where go : List a -> b
-        go = split
-	   'nil _ -> k
-           'cons x -> f x.head (go x.tail)
+-- zipWith : (a b c : Type) -> (a -> b -> c) -> List a -> List b -> List c
+-- zipWith a b c f = zip'
+--   where
+--     zip' : (aTag : Bool) -> List a -> List b -> List c
+--     zip' = split
+--       'no -> \_ -> 'nil ()
+--       'cons x -> split
+--         'nil _ -> 'nil ()
+--         'cons y -> 'cons (head = f x.head y.head,
+--                          tail = zip' x.tail y.tail)
+
+
+-- foldr : (a b : Type) -> List a -> (a -> b -> b) -> b -> b
+-- foldr a b xs f k = go xs
+--   where go : (t : Bool) -> if Type t (ListOne a) [] -> b
+--         go = split
+-- 	   'nil -> \_ -> k
+--            'cons -> \_ -> f x.head (go x.tail)

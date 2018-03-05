@@ -4,6 +4,8 @@
 	    
 open params
 open import Lists
+open import Maybe
+open import Booleans
 
 Move : Type
 Move = [ spkr    : Ind
@@ -11,13 +13,17 @@ Move = [ spkr    : Ind
        ; content : [] ]  -- join of all the possible move contents
 
 Agenda : Type
-Agenda = [head : Move \/ []; tail : List Move]
+Agenda = List Move
 
 ReadyAgenda : Type
-ReadyAgenda = [head : Move \/ []; tail : List Move]
+ReadyAgenda = Just       [head : Move; tail : List Move]
 
 emptyAgenda : Agenda
-emptyAgenda = (head = (), tail = 'nil ())
+emptyAgenda = nothing (List Move)
+
+agendaToMoveList : Agenda -> List Move
+agendaToMoveList a = helper Move a.tag a.content
+
 
 InformationState : Type
 InformationState = [ private : [ agenda     : Agenda ]

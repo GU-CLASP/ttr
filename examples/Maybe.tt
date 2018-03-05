@@ -2,9 +2,8 @@ module
 open import Booleans
 
 Maybe : Type -> Type
-Maybe a =  [ tag : Bool
+Maybe a =  [ tag : {'yes | 'no}
            ; content : if Type tag a []]
-
 
 Just : Type -> Type
 Just a = [ tag : Bool (= true) ; content : a]

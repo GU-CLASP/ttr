@@ -124,19 +124,18 @@ resolveExp (Proj t (AIdent (_,field))) = C.Proj field <$> resolveExp t
 resolveExp (Tuple fs) = C.Record <$> mapM (\(Field (AIdent (_,f)) t0) -> (f,) <$> resolveExp t0) fs
 resolveExp (Split brs)  = do
     brs' <- mapM resolveBranch brs
-    loc  <- getLoc (case brs of Branch (AIdent (l,_)) _ _:_ -> l ; _ -> (0,0))
+    loc  <- getLoc (case brs of Branch (AIdent (l,_)) _ :_ -> l ; _ -> (0,0))
     return $ C.Split loc brs'
 resolveExp (Let decls e) = flip C.Where <$> resolveDecls decls <*> resolveExp e
 resolveExp (Real r) = return (C.Real r)
 resolveExp (PrimOp p) = return (C.Prim p)
 resolveExp (And t u) = C.Meet <$> resolveExp t <*> resolveExp u
 resolveExp (Or t u) = C.Join <$> resolveExp t <*> resolveExp u
-resolveExp (Con (AIdent (_,n)) t) = C.Con n <$> resolveExp t
+resolveExp (Con (AIdent (_,n))) = return (C.Con n)
 resolveExp (Singleton t u) = C.Singleton <$> resolveExp t <*> resolveExp u
 resolveExp (Sum labs) = do
   labs' <- mapM resolveLabel labs
-  loc <- getLoc (case labs of Label (AIdent (l,_)) _:_ -> l ; _ -> (0,0))
-  return $ C.Sum loc labs'
+  return $ C.Sum labs'
 
 resolveExps :: [Exp] -> Resolver [Ter]
 resolveExps ts = traverse resolveExp ts
@@ -144,11 +143,10 @@ resolveExps ts = traverse resolveExp ts
 resolveWhere :: ExpWhere -> Resolver Ter
 resolveWhere = resolveExp . unWhere
 
-resolveBranch :: Branch -> Resolver (C.Label,(C.Binder,C.Ter))
-resolveBranch (Branch lbl args e) = do
-    binder <- resolveBinder args
+resolveBranch :: Branch -> Resolver (C.Label,C.Ter)
+resolveBranch (Branch lbl e) = do
     re      <- resolveWhere e
-    return (unAIdent lbl, (binder, re))
+    return (unAIdent lbl, re)
 
 resolveTele :: [(AIdent,Rig,Exp)] -> Resolver (C.Tele ())
 resolveTele []        = return []
@@ -156,9 +154,8 @@ resolveTele ((i,r,d):t) = do
   x <- resolveBinder i
   ((x,r,) <$> resolveExp d) <:> (resolveTele t)
 
-resolveLabel :: Label -> Resolver (C.Binder, C.Ter)
-resolveLabel (Label n x) =
-  (,) <$> resolveBinder n <*> resolveExp x
+resolveLabel :: Label -> Resolver String
+resolveLabel (Label n) = fst <$> resolveBinder n
 
 -- Resolve Data or Def declaration
 resolveDDecl :: Decl -> Resolver (C.Ident, C.Ter)

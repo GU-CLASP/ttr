@@ -16,6 +16,7 @@ import Data.Monoid hiding (Sum)
 import Data.Dynamic
 import Data.Maybe (fromJust)
 import Algebra.Classes hiding (Sum)
+import Data.List (sort, isSubsequenceOf)
 
 -- | Lookup a value in the environment
 look :: Ident -> Env -> (Binder, Val)
@@ -52,9 +53,9 @@ eval e (Record fs)     = VRecord [(l,eval e x) | (l,x) <- fs]
 eval e (Proj l a)        = projVal l (eval e a)
 eval e (Where t decls) = eval (fst (evalDeclss decls e)) t
 eval e (Module decls)  = VRecord (snd (evalDeclss decls e))
-eval e (Con name ts)   = VCon name (eval e ts)
+eval e (Con name)   = VCon name
 eval e (Split pr alts) = Ter (Split pr alts) e
-eval e (Sum pr ntss)   = Ter (Sum pr ntss) e
+eval e (Sum pr)   =  VSum pr
 eval _ (Undef x)       = VVar $ "<undefined: " ++ show x ++ " >"
 eval _ (Real r)        = VPrim (toDyn r) (show r)
 eval _ (Prim ('#':nm)) = VAbstract nm
@@ -97,7 +98,7 @@ positive :: Val -> Val
 positive v = abstract ">=0" [v]
 
 bot :: Val
-bot = Ter (Sum (Loc "Props" (0,0)) []) Empty
+bot = VSum []
 
 infixr -->
 (-->) :: Val -> Val -> Val
@@ -179,9 +180,9 @@ joinFields _ VBot = VBot
 app :: Val -> Val -> Val
 app (VLam _ f) u = f u
 -- app (Ter (Lam cs x t) e) u = eval (Pair e (x,u)) t
-app (Ter (Split _ nvs) e) (VCon name u) = case lookup name nvs of
-    Just (x,t) -> eval (Pair e (x,u)) t
-    Nothing -> error $ "app: Split with insufficient arguments; " ++
+app (Ter (Split _ nvs) e) (VCon name) = case lookup name nvs of
+    Just t -> eval e t
+    Nothing -> error $ "app: Split with insufficient branches; " ++
                         "missing case for " ++ name
 app u@(Ter (Split _ _) _) v | isNeutral v = VSplit u v -- v should be neutral
                             | otherwise   = error $ "app: VSplit " ++ show v
@@ -243,8 +244,7 @@ conv k u' (Ter (Lam x _ u) e) = do
   conv (k+1) (app u' v) (eval (Pair e (x,v)) u)
 conv k (Ter (Split p _) e) (Ter (Split p' _) e') =
   (p `equal` p') <> convEnv k e e'
-conv k (Ter (Sum p _) e)   (Ter (Sum p' _) e') =
-  (p `equal` p') <> convEnv k e e'
+conv _ (VSum p)   (VSum p') = equal p p'
 conv k (Ter (Undef p) e) (Ter (Undef p') e') =
   (p `equal` p') <> convEnv k e e'
 conv k (VPi _ r u v) (VPi _ r' u' v') = do
@@ -253,8 +253,8 @@ conv k (VPi _ r u v) (VPi _ r' u' v') = do
 conv k (VRecordT fs) (VRecordT fs') = 
   convTele k fs fs'
 conv k (VProj l u) (VProj l' u') = equal l l' <> conv k u u'
-conv k (VCon c us) (VCon c' us') =
-  (c `equal` c') <> (conv k us us')
+conv _ (VCon c) (VCon c') =
+  (c `equal` c')
 conv k (VRecord fs) (VRecord fs') = convFields k fs fs'
 conv k (VApp u v)   (VApp u' v')   = conv k u u' <> conv k v v'
 conv k (VSplit u v) (VSplit u' v') = conv k u u' <> conv k v v'
@@ -268,6 +268,7 @@ conv _ x              x'           = different x x'
 -- -- @sub _ x:a b@: check that x:a also has type b.
 sub :: Int -> Val -> Val -> Val -> Maybe D
 sub _ _ VU VU = Nothing
+sub _ _ (VSum xs) (VSum ys) = if sort xs `isSubsequenceOf` sort ys then Nothing else Just (pretty xs <+> "has more cases than" <+> pretty ys)
 sub _ _ _ (VRecordT VEmpty) = Nothing
 sub k f (VPi _ r u v) (VPi _ r' u' v') = do
   let w = mkVar k
@@ -320,17 +321,19 @@ instance Pretty Val where pretty = showVal 0
 
 showVal :: Int -> Val -> D
 showVal ctx t0 = case t0 of
+  (VSum branches) -> encloseSep "{" "}" "|" (map pretty branches)
   VU            -> "Type"
   (VJoin u v)  -> pp 2 (\p -> p u <+> "\\/" <+> p v)
   (VMeet u v)  -> pp 3 (\p -> p u <+> "/\\" <+> p v)
   (Ter t env)  -> showTer ctx env t
-  (VCon c us)  -> prn 4 (hang 2 ("`" <> pretty c) (showVal 5 us))
+  (VCon c)  -> ("`" <> pretty c)
   (VPi nm r a f) -> pp 1 $ \p ->
      if dependent f then withVar nm $ \v -> (parens (pretty v <+> prettyBind r <+> pretty a) <+> "->") </> p (f `app` (VVar v))
      else (showVal 2 a  <+> "->") </> p (f `app` (VVar "_"))
   (VApp _ _)   -> pp 4 (\p -> hang 2 (p u) (showArgs vs))
      where (u:vs) = fnArgs t0
-  (VSplit (Ter (Split _ branches) env) v) -> hang 2 ("case" <+> pretty v <+> "of") (showSplitBranches env branches)
+  (VSplit (Ter (Split _ branches) env) v) -> hang 2 ("case" <+> pretty v <+> "of") "..."
+    -- (showSplitBranches env branches)
   (VVar x)     -> pretty x
   (VRecordT tele) -> pretty tele
   (VRecord fs)   -> tupled [hang 2 (pretty l <> " =") (pretty e) | (l,e) <- fs]
@@ -405,18 +408,18 @@ showTer ctx ρ t0 = case t0 of
    (Join e0 e1)  -> pp 2 $ \p -> p e0 <+> "\\/" <+> p e1
    (App _ _)   -> pp 4 $ \p -> p e0 <+> showTersArgs ρ es
      where (e0:es) = fnArgsTer t0
-   (Pi _ r a (Lam ("_",_) _ t)) -> pp 1 $ \p -> (showTer 2 ρ a <+> "->") </> p t
+   (Pi _ _r a (Lam ("_",_) _ t)) -> pp 1 $ \p -> (showTer 2 ρ a <+> "->") </> p t
    (Pi _ r a (Lam x _ t)) -> pp 1 $ \p -> (parens (pretty x <+> prettyBind r <+> showTer 0 ρ a) <+> "->") </> p t
-   (Pi _ r e0 e1)    -> "Pi" <+> showTersArgs ρ [e0,e1]
+   (Pi _ _r e0 e1)    -> "Pi" <+> showTersArgs ρ [e0,e1]
    (Lam (x,_) _ e) -> pp 2 (\p -> hang 0 ("\\" <> pretty x <+> "->") (p e))
    (Proj l e)    -> pp 5 (\p -> p e <> "." <> pretty l)
    (RecordT ts)  -> encloseSep "[" "]" ";" (showTele ρ ts)
    (Record fs)   -> encloseSep "(" ")" "," [hang 2 (pretty l <> " =") (showTer 0 ρ e) | (l,e) <- fs]
    (Where e d)   -> pp 0 (\p -> hang 2 (p e) (hang 2 "where" (vcat $ map (showDecls ρ) d)))
    (Var x)       -> prettyLook x ρ
-   (Con c es)    -> hang 2 ("`" <> pretty c) (showTer 5 ρ es)
-   (Split _l branches)   -> hang 2 "split" (showSplitBranches ρ branches)
-   (Sum _l branches) -> encloseSep "{" "}" "|" (map (showBranch ρ) branches)
+   (Con c)    -> "`" <> pretty c 
+   (Split _l branches)   -> hang 2 "split" "..."
+   (Sum branches) -> encloseSep "{" "}" "|" (map pretty branches)
    (Undef _)     -> "undefined (1)"
    (Real r)      -> showy r
    (Prim n)      -> showy n
@@ -425,15 +428,13 @@ showTer ctx ρ t0 = case t0 of
        pp opPrec k = prn opPrec (k (showTer opPrec ρ))
        prn opPrec = (if opPrec < ctx then parens else id)
 
+fnArgsTer :: Ter' t -> [Ter' t]
 fnArgsTer (App u v) = fnArgsTer u ++ [v]
 fnArgsTer x = [x]
 
 showSplitBranches :: Env -> [Brc a] -> D
 showSplitBranches ρ branches = encloseSep "{" "}" ";"
-  [hang 2 (pretty l <+> ((pretty . fst) bnds) <+> "↦") (showTer 0 ρ t)  | (l,(bnds,t)) <- branches]
-
-showBranch :: Env -> (Binder, Ter' a) -> D
-showBranch env ((b,_),arg) = pretty b <+> (showTer 0 env arg)
+  [hang 2 (pretty l <+> "↦") (showTer 0 ρ t)  | (l,t) <- branches]
 
 instance Pretty Ctxt where
   pretty ctxt = vcat [pretty nm <+> ":" <+> pretty typ | ((nm,_),typ) <- ctxt]
@@ -454,11 +455,12 @@ class Value v where
 
 instance Value Val where
   unknowns v0 = case v0 of
+    VSum _ -> []
     VU -> []
     VPi _binder _rig x  y -> unknowns x ++ unknowns y
     VRecordT x -> unknowns x
     VRecord x -> concatMap (unknowns . snd) x
-    VCon _ x -> unknowns x
+    VCon _ -> []
     VApp x y -> unknowns x ++ unknowns y
     VSplit x y -> unknowns x ++ unknowns y
     VProj _ x -> unknowns x

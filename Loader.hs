@@ -38,9 +38,10 @@ loadExpression inEnv prefix f s = do
         case runResolver f (resolveExp m) of
           Left err -> return $ C.Failed $ sep ["Resolver error:", err]
           Right (t,_,imps) -> do
-            forM_ imps (load prefix)
+            forM_ imps (load prefix) -- find and load all imports in this module
             e <- get
-            let (x,msgs) = TC.runModule ((if inEnv then mkEnv e else id) (TC.emptyEnv (modules e))) t
+            let completeEnv = (if inEnv then mkEnv e else id) (TC.emptyEnv (modules e))
+            let (x,msgs) = TC.runModule completeEnv t
             liftIO $ forM_ msgs $ putStrLn . render
             return x
 

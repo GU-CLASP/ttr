@@ -30,7 +30,6 @@ And.      Exp3 ::= Exp3 "/\\" Exp3;
 App.      Exp4 ::= Exp4 Exp5 ;
 Singleton. Exp5 ::= Exp5 "(= " Exp ")" ;
 Proj.     Exp5 ::= Exp5 "." AIdent ;
-Con.      Exp6 ::= "'" AIdent Exp6;
 Module.   Exp6 ::= "module" "{" [Decl] "}" ;
 Tuple.    Exp6 ::= "(" [Fld] ")" ;
 Record.   Exp6 ::= "[" [PseudoTDecl] "]"  ;
@@ -41,16 +40,17 @@ Real.     Exp6 ::= Double ;
 Split.    Exp6 ::= "split" "{" [Branch] "}" ;
 PrimOp.   Exp6 ::= "primitive" String;
 Import.   Exp6 ::= "import" AIdent ;
+Con.      Exp6 ::= "'" AIdent;
 coercions Exp 6 ;
 
 separator Exp "," ;
 
 -- Branches
-Branch.   Branch ::= "'" AIdent AIdent "->" ExpWhere ;
+Branch.   Branch ::= "'" AIdent "->" ExpWhere ;
 separator Branch ";" ;
 
 -- Labelled sum alternatives
-Label.    Label   ::= "'" AIdent Exp ;
+Label.    Label   ::= "'" AIdent ;
 separator Label "|" ;
 
 -- Nonempty telescopes with Exp:s, this is hack to avoid ambiguities

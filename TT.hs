@@ -37,14 +37,14 @@ type Binder = (Ident,Loc)
 noLoc :: String -> Binder
 noLoc x = (x, Loc "" (0,0))
 
--- Branch of the form: c x1 .. xn -> e
-type Brc a    = (Label,(Binder,Ter' a))
+-- Branch of the form: c -> e
+type Brc a    = (Label,Ter' a)
 
 -- Telescope (x1 : A1) .. (xn : An)
 type Tele a   = [(Binder,Rig,Ter' a)]
 
 -- Labelled sum: c A1
-type LblSum a = [(Binder,Ter' a)]
+type LblSum = [String]
 
 -- Context gives type values to identifiers
 type Ctxt   = [(Binder,Val)]
@@ -80,11 +80,11 @@ data Ter' a = App (Ter' a) (Ter' a)
             | Var Ident
             | U
             -- constructor c Ms
-            | Con Label (Ter' a)
+            | Con Label
             -- branches c1 xs1  -> M1,..., cn xsn -> Mn
             | Split Loc [Brc a]
             -- labelled sum c1 A1s,..., cn Ans (assumes (ter' a)ms are constructors)
-            | Sum Loc (LblSum a)
+            | Sum LblSum
             | Undef Loc
             | Prim String
             | Import String a -- the value of the imported thing
@@ -104,6 +104,7 @@ data VTele = VEmpty | VBind Binder Rig Val (Val -> VTele)
 instance Monoid VTele where
   mempty = VEmpty
   mappend VEmpty x = x
+  mappend VBot _ = error "VBOT"
   mappend (VBind x r a xas) ys = VBind x r a (\v -> xas v <> ys)
 
 teleBinders :: VTele -> [Binder]
@@ -113,7 +114,11 @@ teleBinders _ = []
 data Interval a = a :.. a deriving (Eq,Show)
 data BNat = Fin Integer | Inf deriving (Eq,Show)
 type Rig = Interval BNat
+
+pattern Free :: Interval BNat
 pattern Free = Fin 0 :.. Inf
+
+free :: Interval BNat
 free = zero :.. Inf
 
 instance AbelianAdditive BNat
@@ -179,7 +184,8 @@ data Val = VU
          | VPi String Rig Val Val
          | VRecordT VTele
          | VRecord [(String,Val)]
-         | VCon Ident Val
+         | VSum LblSum
+         | VCon Ident
          | VApp Val Val            -- the first Val must be neutral
          | VSplit Val Val          -- the second Val must be neutral
          | VVar String

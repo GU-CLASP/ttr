@@ -91,12 +91,15 @@ addTypeVal p@(x,_) (TEnv k rho gam ex ms) =
 
 addTeleVal :: VTele -> TEnv -> TEnv
 addTeleVal VEmpty lenv = lenv
+addTeleVal VBot _ = error "VBOT escaped"
 addTeleVal (VBind x _r a rest) lenv = addTypeVal (x,a) (addTeleVal (rest (mkVar (index lenv))) lenv) 
 
 -- | Add a bunch of (already checked) declarations to the environment.
 addDecls :: Recordoid -> TEnv -> TEnv
 addDecls ([],VEmpty) = id
 addDecls ((v:vs),VBind x _r a bs) = addDecls (vs,bs v) . addDecl x v a
+
+addDecl :: Binder -> Val -> Val -> TEnv -> TEnv
 addDecl x v a (TEnv k rho gam ex ms) = (TEnv k (Pair rho (x,v)) ((x,a):gam) ex) ms
 
 trace :: D -> Typing ()
@@ -114,14 +117,6 @@ runInfer lenv t = runTyping lenv $ do
   (t',a) <- checkInfer t
   e <- asks env
   return (eval e t', a)
-
--- Extract the type of a label as a closure
-getLblType :: String -> Val -> Typing (CTer, Env)
-getLblType c (Ter (Sum _ cas) r) = case getIdent c cas of
-  Just as -> return (as,r)
-  Nothing -> oops ("getLblType" <+> pretty c)
-getLblType c u = oops (sep ["expected a data type for the constructor",
-                              pretty c,"but got",pretty u])
 
 getFresh :: Typing Val
 getFresh = mkVar <$> index <$> ask
@@ -174,18 +169,14 @@ check a t = case (a,t) of
     (t',t'') <- checkEval s t
     checkConv "singleton" t'' u
     return t'
-  (_,Con c e) -> do
-    (b,nu) <- getLblType c a
-    Con c <$> check (eval nu b) e
-  (VU,Sum loc bs) -> Sum loc <$> forM bs (\(l,aa) -> (l,) <$> checkType aa)
-  (VPi x r (Ter (Sum _ cas) nu) f,Split loc ces) -> do
-    let cas' = sortBy (compare `on` fst . fst) cas
+  (VPi x r (VSum cas) f,Split loc ces) -> do
+    let cas' = sort cas
         ces' = sortBy (compare `on` fst) ces
-    if map (fst . fst) cas' == map fst ces'
+    if cas' == map fst ces'
        then do Split loc <$>
-                 (forM (zip ces' cas') $ \((lbl1,(bndr,term)), ((_lbl2,_),typ)) -> do
-                     Lam _ _ term' <- check (VPi x r (eval nu typ) f) (Lam bndr Nothing term)
-                     return (lbl1,(bndr,term')))
+                 (forM ces' $ \(lbl,term) -> do
+                     term' <- check (f `app` VCon lbl) term
+                     return (lbl,term'))
        else oops "case branches do not match the data type"
   (VPi _ r a f,Lam x aa t)  -> do
     var <- getFresh
@@ -208,22 +199,25 @@ check a t = case (a,t) of
     return $ Where e' dd
   (_,Undef x) -> return (Undef x)
   _ -> do
-    logg (sep ["Checking that" <+> pretty t, "has type" <+> pretty a]) $ do
+    logg (sep ["Checking that inferred type for" <+> pretty t, "is subtype of" <+> pretty a]) $ do
        (t',v) <- checkInfer t
        e <- asks env
        checkSub "inferred type" (eval e t') a v
        return t'
 
-inferRecord :: [(String,Ter)] -> Typing [(String,CTer)]
-inferRecord [] = return []
+inferRecord :: [(String,Ter)] -> Typing ([(String,CTer)], VTele)
+inferRecord [] = return ([],VEmpty)
 inferRecord ((fieldName,fieldTerm):otherFields) = do
-  (fieldValue,_fieldType) <- checkInfer fieldTerm
-  ((fieldName,fieldValue):) <$> inferRecord otherFields
+  (fieldValue,fieldType) <- checkInfer fieldTerm
+  (otherFields',otherTele) <- inferRecord otherFields
+  return (((fieldName,fieldValue):otherFields'),
+           VBind (noLoc fieldName) one fieldType (\_ -> otherTele))
 
 -- | Check that a record has a given type
 checkRecord :: VTele -> [(String,Ter)] -> Typing [(String,CTer)]
-checkRecord VEmpty ts = inferRecord ts
-checkRecord (VBind (x,l) rig a r) ts =
+checkRecord VEmpty ts = fst <$> inferRecord ts -- TODO: don't ignore the rest of the record?
+checkRecord VBot _ = error "VBOT found"
+checkRecord (VBind (x,_loc) rig a r) ts =
   case partition ((== x) . fst) ts of
     ([],_) -> oops $ sep ["type expects field", pretty x, "but it cannot be found in the term."]
     ([(_,t)],otherFields) -> do
@@ -273,6 +267,7 @@ unsafeInfer e t = case (runInfer e t) of
 -- | Infer the type of the argument, and evaluate it.
 checkInfer :: Ter -> Typing (CTer,Val)
 checkInfer e = case e of
+  Con c -> return (Con c, VSum [c])
   Lam b@(x,_) (Just a) t -> do
     (aa,a') <- checkTypeEval a
     (tt,_) <- local (addTypeVal (b,a')) (checkInfer t)
@@ -292,6 +287,7 @@ checkInfer e = case e of
     return (Module (map fst dss),VRecordT tele)
   Real x -> return (Real x, real)
   Prim p -> return (Prim p,lkPrimTy p)
+  Sum bs -> return (Sum bs, VU)
   Singleton a b -> do
     (aa,a') <- checkTypeEval a
     b' <- check a' b
@@ -327,6 +323,9 @@ checkInfer e = case e of
     t' <- checkType t
     u' <- checkType u
     return (Join t' u', VU)
+  Record fields -> do
+    (fields',tele) <- inferRecord fields
+    return (Record fields', VRecordT tele)
   Where t d -> do
     (dd,d') <- unzip <$> checkDeclss d
     (t',whereType) <- local (addDecls (mconcat d')) $ checkInfer t
