@@ -14,14 +14,14 @@ open import Kos params
 open params
 
 countergreeting : InformationState /\ [ dgb : [ moves      : List Move
-                          ; latestMove : [ spkr    : Ind 
+                          ; latestMove : [ spkr    : Ind
 			    	       	 ; addr    : Ind (= agent)
 			    	       	 ; content : [c : greet spkr addr]]]]
                   -> InformationState
-countergreeting r = ( private = ( agenda = 'cons (head = ( spkr = agent
-  		      		       	     	       	 , addr = user0
-						     	 , content = (c = sg')),
-						  tail = r.private.agenda ))
+countergreeting r = ( private = ( agenda = (head = ( spkr = agent
+                                                   , addr = user0
+                                                   , content = (c = sg')),
+                                            tail = r.private.agenda ))
                     , dgb = r.dgb )
 
 greeting' : InformationState -> InformationState

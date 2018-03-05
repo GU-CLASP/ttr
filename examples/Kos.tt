@@ -10,7 +10,16 @@ Move = [ spkr    : Ind
        ; addr    : Ind
        ; content : [] ]  -- join of all the possible move contents
 
+Agenda : Type
+Agenda = [head : Move \/ []; tail : List Move]
+
+ReadyAgenda : Type
+ReadyAgenda = [head : Move \/ []; tail : List Move]
+
+emptyAgenda : Agenda
+emptyAgenda = (head = (), tail = 'nil ())
+
 InformationState : Type
-InformationState = [ private : [ agenda     : List Move ]
+InformationState = [ private : [ agenda     : Agenda ]
 		   ; dgb     : [ moves      : List Move
 		     	       ; latestMove : Move ]]
