@@ -16,13 +16,16 @@ Agenda : Type
 Agenda = List Move
 
 ReadyAgenda : Type
-ReadyAgenda = Just       [head : Move; tail : List Move]
+ReadyAgenda = NonEmptyList Move
 
 emptyAgenda : Agenda
-emptyAgenda = nothing (List Move)
+emptyAgenda = emptyList Move
 
-agendaToMoveList : Agenda -> List Move
-agendaToMoveList a = helper Move a.tag a.content
+demoteAgenda : ReadyAgenda -> Agenda
+demoteAgenda = demoteList Move
+
+consAgenda : Move -> Agenda -> ReadyAgenda
+consAgenda m a = (tag = true, content = (head = m, tail = a))
 
 
 InformationState : Type

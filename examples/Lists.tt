@@ -6,13 +6,26 @@ in
 module
 
 
-List : Type -> Type
-List a = [ tag : {'yes | 'no}
-         ; content : if Type tag [head : a; tail : List a] []] 
+-- Attention: recursive types MUST be defined with an *explicit*
+-- split; this cannot factored out using, say, Maybe.
+mutual
+  List1 : Type -> Type
+  List1 a = [head : a; tail : List a]
 
-ListOne : Type -> Type
-ListOne a = [head : a; tail : List a]
+  List : Type -> Type
+  List a = [ tag : Bool
+           ; content : MaybeList a tag ]
 
+  MaybeList : Type -> Bool -> Type
+  MaybeList a = split
+    'yes -> List1 a
+    'no -> []
+
+NonEmptyList : Type -> Type
+NonEmptyList a = [ tag : True; content : List1 a ]
+
+demoteList : (a : Type) -> NonEmptyList a -> List a
+demoteList _ x = ( tag = true, content = x.content ) -- TODO: improve subtyping
 
 emptyList : (a : Type) -> List a
 emptyList a = (tag = 'no, content = ())
@@ -33,9 +46,9 @@ isNil a x = not x.tag
 --                          tail = zip' x.tail y.tail)
 
 
--- foldr : (a b : Type) -> List a -> (a -> b -> b) -> b -> b
--- foldr a b xs f k = go xs
---   where go : (t : Bool) -> if Type t (ListOne a) [] -> b
---         go = split
--- 	   'nil -> \_ -> k
---            'cons -> \_ -> f x.head (go x.tail)
+foldr : (a b : Type) -> List a -> (a -> b -> b) -> b -> b
+foldr a b xs f k = go (xs.tag) (xs.content)
+  where go : (t : Bool) -> MaybeList a t -> b
+        go = split
+	   'no -> \_ -> k
+           'yes -> \x -> f x.head (go x.tail.tag x.tail.content)

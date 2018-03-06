@@ -9,7 +9,7 @@
 			 ; content : [] ]
            ; ]) -> module
 
-open import Lists	
+open import Lists
 open import Kos params
 open params
 
@@ -18,10 +18,10 @@ countergreeting : InformationState /\ [ dgb : [ moves      : List Move
                                                              ; addr    : Ind (= agent)
                                                              ; content : [c : greet spkr addr]]]]
                   -> (InformationState /\ [ private : [ agenda : ReadyAgenda ]])
-countergreeting r = ( private = ( agenda = (head = ( spkr = agent
-                                                   , addr = user0
-                                                   , content = (c = sg')),
-                                            tail = 'cons (r.private.agenda) ))
+countergreeting r = ( private = ( agenda = consAgenda ( spkr = agent
+                                                      , addr = user0
+                                                      , content = (c = sg'))
+                                                      r.private.agenda)
                     , dgb = r.dgb )
 
 greeting' : InformationState -> InformationState
@@ -31,6 +31,6 @@ greeting' s = ( private = s.private
 			     		  content = (c = sg user0 agent))))
 
 initialize : [] -> InformationState
-initialize _ = ( private = ( agenda = 'nil ())
-	       , dgb     = ( moves  = 'nil ()
+initialize _ = ( private = ( agenda = emptyAgenda)
+	       , dgb     = ( moves  = emptyList Move
 	       	 	   , latestMove = emptyMove))

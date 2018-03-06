@@ -21,7 +21,10 @@ not = split
 if : (a : Type) -> Bool -> a -> a -> a
 if a c x y = iffliped a x y c
 
-true : Bool
+True : Type
+True = {'yes} (= 'yes)
+
+true : True
 true = 'yes
 
 false : Bool

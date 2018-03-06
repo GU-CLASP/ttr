@@ -1,9 +1,12 @@
 module
 open import Booleans
 
+When : Bool -> Type -> Type
+When tag a = if Type tag a []
+
 Maybe : Type -> Type
 Maybe a =  [ tag : {'yes | 'no}
-           ; content : if Type tag a []]
+           ; content : When tag a]
 
 Just : Type -> Type
 Just a = [ tag : Bool (= true) ; content : a]
