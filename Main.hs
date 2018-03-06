@@ -114,7 +114,9 @@ loop flags prefix f = do
   case input of
     Nothing    -> outputStrLn help >> cont
     Just ":q"  -> return ()
-    Just ":r"  -> initLoop flags prefix f
+    Just ":r"  -> do
+      lift (put initState)
+      initLoop flags prefix f
     Just (':':'l':' ':str)
       | ' ' `elem` str -> do outputStrLn "Only one file allowed after :l"
                              cont
