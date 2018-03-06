@@ -16,7 +16,7 @@ import Data.Monoid hiding (Sum)
 import Data.Dynamic
 import Data.Maybe (fromJust)
 import Algebra.Classes hiding (Sum)
-import Data.List (sort, isSubsequenceOf)
+import Data.List (sort, isSubsequenceOf, intersect)
 
 -- | Lookup a value in the environment
 look :: Ident -> Env -> (Binder, Val)
@@ -53,9 +53,9 @@ eval e (Record fs)     = VRecord [(l,eval e x) | (l,x) <- fs]
 eval e (Proj l a)        = projVal l (eval e a)
 eval e (Where t decls) = eval (fst (evalDeclss decls e)) t
 eval e (Module decls)  = VRecord (snd (evalDeclss decls e))
-eval e (Con name)   = VCon name
+eval _ (Con name)   = VCon name
 eval e (Split pr alts) = Ter (Split pr alts) e
-eval e (Sum pr)   =  VSum pr
+eval _ (Sum pr)   =  VSum pr
 eval _ (Undef x)       = VVar $ "<undefined: " ++ show x ++ " >"
 eval _ (Real r)        = VPrim (toDyn r) (show r)
 eval _ (Prim ('#':nm)) = VAbstract nm
@@ -130,6 +130,9 @@ vJoin (VRecordT fs) (VRecordT fs') | botTele x = VJoin (VRecordT fs) (VRecordT f
 vJoin x y = VJoin x y
 
 vMeet :: Val -> Val -> Val
+vMeet (VSingleton t v) t' = VSingleton (vMeet t t') v
+vMeet t' (VSingleton t v) = VSingleton (vMeet t' t) v
+vMeet (VSum xs) (VSum ys) = VSum (xs `intersect` ys)
 vMeet (VRecordT fs) (VRecordT fs') | botTele x = VMeet (VRecordT fs) (VRecordT fs')
                                    | otherwise = VRecordT x
   where x = meetFields fs fs'
