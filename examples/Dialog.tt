@@ -13,8 +13,7 @@ open import Lists
 open import Kos params
 open params
 
-countergreeting : InformationState /\ [ dgb : [ moves      : List Move
-                                              ; latestMove : [ spkr    : Ind
+countergreeting : InformationState /\ [ dgb : [ latestMove : [ spkr    : Ind
                                                              ; addr    : Ind (= agent)
                                                              ; content : [c : greet spkr addr]]]]
                   -> (InformationState /\ [ private : [ agenda : ReadyAgenda ]])
@@ -24,7 +23,9 @@ countergreeting r = ( private = ( agenda = consAgenda ( spkr = agent
                                                       r.private.agenda)
                     , dgb = r.dgb )
 
-greeting' : InformationState -> InformationState
+greeting' : InformationState  -> InformationState /\ [ dgb : [ latestMove : [ spkr    : Ind
+                                                             ; addr    : Ind (= agent)
+                                                             ; content : [c : greet spkr addr]]]]
 greeting' s = ( private = s.private
 	       , dgb     = ( moves  = s.dgb.moves
 	       	 	   , latestMove = (spkr = user0, addr = agent,
