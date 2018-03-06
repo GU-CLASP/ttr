@@ -328,8 +328,9 @@ checkInfer e = case e of
     u' <- checkType u
     return (Join t' u', VU)
   Where t d -> do
-    (_,d') <- unzip <$> checkDeclss d
-    local (addDecls (mconcat d')) $ checkInfer t
+    (dd,d') <- unzip <$> checkDeclss d
+    (t',whereType) <- local (addDecls (mconcat d')) $ checkInfer t
+    return (Where t' dd,whereType)
   _ -> oops ("checkInfer " <> pretty e)
 
 
