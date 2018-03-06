@@ -30,6 +30,7 @@ look x Empty = error ("panic: variable not found in env:" ++ show x)
 
 etaExpandRecord :: VTele -> Val -> [Val]
 etaExpandRecord VEmpty _ = []
+etaExpandRecord VBot _ = error "VBot escaped"
 etaExpandRecord (VBind (x,_) _rig  _ xs) r = let v = projVal x r in v:etaExpandRecord (xs v) r
 
 evalDecls :: TDecls Val -> Env -> (Env,[(String,Val)])
@@ -151,7 +152,8 @@ lacksField l fs = not (hasField l fs)
 botTele :: VTele -> Bool
 botTele VEmpty = False
 botTele VBot = True
-botTele  (VBind _ _ _ t) = botTele (t (error "botTele: cannot look at values!"))
+botTele (VBind _ _ _ t) = botTele (t (error "botTele: cannot look at values!"))
+
 
 -- | the meet of two telescopes
 meetFields :: VTele -> VTele -> VTele
@@ -304,7 +306,9 @@ convTele _ x x' = different x x'
 subTele :: Int -> Val -> VTele -> VTele -> Maybe D
 subTele _ _ _ VEmpty = Nothing  -- all records are a subrecord of the empty record
 subTele k z (VBind (l,_ll) r a t) (VBind (l',ll') r' a' t') = do
-  let v = projVal l z
+  let v = case a of
+            VSingleton _ v' -> v' -- TODO: use all possible values
+            _ -> projVal l z
   if l == l'
     then included r r' <> sub k v a a' <> subTele (k+1) z (t v) (t' v)
     else subTele (k+1) z (t v) (VBind (l',ll') r' a' t')

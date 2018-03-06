@@ -1,16 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 module DialogMan where
 
-import Control.Monad.Trans.State.Strict
 import Control.Monad.Except
-import Data.List
-import System.Directory
-import System.FilePath hiding ((</>))
-import System.Environment
-import System.Console.GetOpt
 import System.Console.Haskeline
 import qualified System.FilePath as FP
-import Data.Maybe
 import Control.Applicative
 
 import TT
