@@ -332,7 +332,7 @@ showVal ctx t0 = case t0 of
      else (showVal 2 a  <+> "->") </> p (f `app` (VVar "_"))
   (VApp _ _)   -> pp 4 (\p -> hang 2 (p u) (showArgs vs))
      where (u:vs) = fnArgs t0
-  (VSplit (Ter (Split _ branches) env) v) -> hang 2 ("case" <+> pretty v <+> "of") "..."
+  (VSplit (Ter (Split _ branches) env) v) -> hang 2 ("case" <+> pretty v <+> "of") (showSplitBranches env branches)
     -- (showSplitBranches env branches)
   (VVar x)     -> pretty x
   (VRecordT tele) -> pretty tele
@@ -418,7 +418,7 @@ showTer ctx ρ t0 = case t0 of
    (Where e d)   -> pp 0 (\p -> hang 2 (p e) (hang 2 "where" (vcat $ map (showDecls ρ) d)))
    (Var x)       -> prettyLook x ρ
    (Con c)    -> "`" <> pretty c 
-   (Split _l branches)   -> hang 2 "split" "..."
+   (Split _l branches)   -> hang 2 "split" (showSplitBranches ρ branches)
    (Sum branches) -> encloseSep "{" "}" "|" (map pretty branches)
    (Undef _)     -> "undefined (1)"
    (Real r)      -> showy r
