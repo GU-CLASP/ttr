@@ -121,11 +121,8 @@ loop flags prefix f = do
       | ' ' `elem` str -> do outputStrLn "Only one file allowed after :l"
                              cont
       | otherwise      -> initLoop flags prefix str
-    Just (':':'d':' ':str)
-      | ' ' `elem` str -> do outputStrLn "Only one word allowed after :d"
-                             cont
-      | otherwise      -> do
-          dialogMan (read str) prefix "Dialog"
+    Just ":d" -> do
+          dialogMan prefix "Dialog"
           cont
     Just (':':'c':'d':' ':str) -> do liftIO (setCurrentDirectory str)
                                      cont

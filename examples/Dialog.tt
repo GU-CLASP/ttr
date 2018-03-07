@@ -14,31 +14,34 @@ open import Kos params
 open import Maybe
 open params
 
-fulfilAgenda : InformationState /\ [ private : [ agenda : ReadyAgenda]]
-	     -> InformationState
-fulfilAgenda s = ( private = (agenda = emptyAgenda)
-	       	 , dgb     = (moves = cons Move (head Move s.private.agenda) s.dgb.moves
-		   	     , latestMove = (head Move s.private.agenda)))
 
-countergreeting : InformationState /\ [ dgb : [ latestMove : [ spkr    : Ind
-                                                             ; addr    : Ind (= agent)
-                                                             ; content : [c : greet spkr addr]]]]
-                  -> (InformationState /\ [ private : [ agenda : ReadyAgenda ]])
-countergreeting r = ( private = ( agenda = consAgenda ( spkr = agent
-                                                      , addr = user0
-                                                      , content = (c = sg'))
-                                                      r.private.agenda)
-                    , dgb = r.dgb )
+ruleSet :
+  [fulfilAgenda : InformationState /\ [ private : [ agenda : ReadyAgenda]] -> InformationState
+  ;countergreeting : InformationState /\ [ dgb : [ latestMove : [ spkr    : Ind
+                                                              ; addr    : Ind (= agent)
+                                                              ; content : [c : greet spkr addr]]]]
+                    -> (InformationState /\ [ private : [ agenda : ReadyAgenda ]])
+  ;greeting' : InformationState  -> InformationState /\ [ dgb : [ latestMove : [ spkr    : Ind
+                                                               ; addr    : Ind (= agent)
+                                                               ; content : [c : greet spkr addr]]]]
+  ;initialize : [] -> InformationState]
 
-greeting' : InformationState  -> InformationState /\ [ dgb : [ latestMove : [ spkr    : Ind
-                                                             ; addr    : Ind (= agent)
-                                                             ; content : [c : greet spkr addr]]]]
-greeting' s = ( private = s.private
-	       , dgb     = ( moves  = s.dgb.moves
-	       	 	   , latestMove = (spkr = user0, addr = agent,
-			     		  content = (c = sg user0 agent))))
+ruleSet = 
+ (fulfilAgenda = \s -> ( private = (agenda = emptyAgenda)
+                       , dgb     = (moves = cons Move (head Move s.private.agenda) s.dgb.moves
+                                   , latestMove = (head Move s.private.agenda)))
 
-initialize : [] -> InformationState
-initialize _ = ( private = ( agenda = emptyAgenda)
-	       , dgb     = ( moves  = emptyList Move
-	       	 	   , latestMove = emptyMove))
+ ,countergreeting = \r -> ( private = ( agenda = consAgenda ( spkr = agent
+                                                        , addr = user0
+                                                        , content = (c = sg'))
+                                                        r.private.agenda)
+                      , dgb = r.dgb )
+
+ ,greeting' = \s -> ( private = s.private
+                 , dgb     = ( moves  = s.dgb.moves
+                             , latestMove = (spkr = user0, addr = agent,
+                                            content = (c = sg user0 agent))))
+
+ ,initialize = \ _ -> ( private = ( agenda = emptyAgenda)
+                 , dgb     = ( moves  = emptyList Move
+                             , latestMove = emptyMove)))
