@@ -182,7 +182,7 @@ check a t = case (a,t) of
     var <- getFresh
     (a',aa') <- case aa of
       Just aaa -> do (aa',a') <- checkTypeEval aaa
-                     checkSub "lam type" var a' a
+                     checkSub "lam type" [] a' a
                      return (a',Just aa')
       Nothing -> return (a,Nothing)
     Lam x aa' <$> withLocal (x,r,a') (check (app f var) t)
@@ -202,7 +202,7 @@ check a t = case (a,t) of
     logg (sep ["Checking that inferred type for" <+> pretty t, "is subtype of" <+> pretty a]) $ do
        (t',v) <- checkInfer t
        e <- asks env
-       checkSub "inferred type" (eval e t') a v
+       checkSub "inferred type" [eval e t'] a v
        return t'
 
 inferRecord :: [(String,Ter)] -> Typing ([(String,CTer)], VTele)
@@ -236,7 +236,7 @@ checkTypeEval t = do
   e <- asks env
   return (t',eval e t')
 
-checkSub :: D -> Val -> Val -> Val -> Typing ()
+checkSub :: D -> [Val] -> Val -> Val -> Typing ()
 checkSub msg z a v = do
     k <- index <$> ask
     case sub k z v a of

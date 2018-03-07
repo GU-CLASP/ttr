@@ -38,6 +38,7 @@ evalDecls (Mutual decls) ρ = (ρ',[(x,eval ρ' y) | ((x,_),_,y) <- decls])
   where ρ' = PDef [ (x,y) | (x,_,y) <- decls ] ρ
 evalDecls (Open (VRecordT tele) t) ρ = (foldl Pair ρ (zip (teleBinders tele) vs),[])
   where vs = etaExpandRecord tele (eval ρ t)
+evalDecls (Open _ _) _ = error "panic: open of non-record"
 
 evalDeclss :: [TDecls Val] -> Env -> (Env,[(String,Val)])
 evalDeclss dss ρ = foldl (\(e,vs) ds -> let (e',vs') = evalDecls ds e in (e',vs++vs')) (ρ,[]) dss
@@ -98,8 +99,11 @@ real = VAbstract "R"
 positive :: Val -> Val
 positive v = abstract ">=0" [v]
 
-bot :: Val
-bot = VSum []
+pattern VBottom :: Val
+pattern VBottom = VSum []
+
+pattern VTop :: Val
+pattern VTop = VRecordT VEmpty
 
 infixr -->
 (-->) :: Val -> Val -> Val
@@ -112,7 +116,7 @@ lkPrimTy "+" = real --> real --> real
 lkPrimTy "*" = real --> real --> real
 lkPrimTy "positive?" = pi "x" real $ \x ->
                        pi "type" VU   $ \ty ->
-                       (positive x --> ty) --> ((positive x --> bot) --> ty) --> ty
+                       (positive x --> ty) --> ((positive x --> VBottom) --> ty) --> ty
 lkPrimTy "#R" = VU
 lkPrimTy "#>=0" = real --> VU
 lkPrimTy "#Ind" = VU
@@ -124,13 +128,22 @@ evalTele e (((x,l),r,t):ts) = VBind (x,l) r t' (\x' -> evalTele (Pair e ((x,l),x
   where t' = eval e t
 
 vJoin :: Val -> Val -> Val
+vJoin VTop _ = VTop
+vJoin _ VTop = VTop
+vJoin VBottom i = i
+vJoin i VBottom = i
 -- vJoin (VPi nm a b) (VPi _ a' b') = VPi nm (vMeet a a') (vJoin b b') -- EQUALITY of codomain is needed
 vJoin (VRecordT fs) (VRecordT fs') | botTele x = VJoin (VRecordT fs) (VRecordT fs')
                                    | otherwise = VRecordT x
   where x = joinFields fs fs'
 vJoin x y = VJoin x y
 
+
 vMeet :: Val -> Val -> Val
+vMeet VBottom _ = VBottom
+vMeet _ VBottom = VBottom
+vMeet VTop i = i
+vMeet i VTop = i
 vMeet (VSingleton t v) t' = VSingleton (vMeet t t') v
 vMeet t' (VSingleton t v) = VSingleton (vMeet t' t) v
 vMeet (VSum xs) (VSum ys) = VSum (xs `intersect` ys)
@@ -271,20 +284,20 @@ conv _ (VPrim _ _) (VPrim _ _) = Nothing
 conv _ x              x'           = different x x'
 
 -- -- @sub _ x:a b@: check that x:a also has type b.
-sub :: Int -> Val -> Val -> Val -> Maybe D
+sub :: Int -> [Val] -> Val -> Val -> Maybe D
 sub _ _ VU VU = Nothing
 sub _ _ (VSum xs) (VSum ys) = if sort xs `isSubsequenceOf` sort ys then Nothing else Just (pretty xs <+> "has more cases than" <+> pretty ys)
 sub _ _ _ (VRecordT VEmpty) = Nothing
-sub k f (VPi _ r u v) (VPi _ r' u' v') = do
+sub k fs (VPi _ r u v) (VPi _ r' u' v') = do
   let w = mkVar k
-  included r' r <> sub k w u' u  <> sub (k+1) (app f w) (app v w) (app v' w)
+  included r' r <> sub k [w] u' u  <> sub (k+1) [app f w | f <- fs] (app v w) (app v' w)
 sub k z (VRecordT fs) (VRecordT fs') = subTele k z fs fs'
 sub k x (VJoin a b) c = sub k x a c <> sub k x b c
 sub k x c (VJoin a b) = sub k x c a `orElse` sub k x c b
 sub k x c (VMeet a b) = sub k x c a <> sub k x c b
 sub k x (VMeet a b) c = sub k x a c `orElse` sub k x b c
-sub k x (VSingleton t v) t' = sub k x t t' `orElse` sub k v t t'
-sub k x t (VSingleton t' v') = sub k x t t' <> conv k x v'
+sub k x (VSingleton t v) t' = sub k (v:x) t t'
+sub k x t (VSingleton t' v') = sub k x t t' <> anyOf (map (conv k v') x)
 sub k _ x x' = conv k x x'
 
 
@@ -292,6 +305,9 @@ orElse :: Maybe D -> Maybe D -> Maybe D
 orElse Nothing _ = Nothing
 orElse _ Nothing = Nothing
 orElse (Just x) (Just y) = Just (x <> " and " <> y)
+
+anyOf :: [Maybe D] -> Maybe D
+anyOf = foldr orElse Nothing
 
 convEnv :: Int -> Env -> Env -> Maybe D
 convEnv k e e' = mconcat $ zipWith (conv k) (valOfEnv e) (valOfEnv e')
@@ -303,15 +319,16 @@ convTele k (VBind (l,_) r a t) (VBind (l',_) r' a' t') = do
   equal r r' <> equal l l' <> conv k a a' <> convTele (k+1) (t v) (t' v)
 convTele _ x x' = different x x'
 
-subTele :: Int -> Val -> VTele -> VTele -> Maybe D
+subTele :: Int -> [Val] -> VTele -> VTele -> Maybe D
 subTele _ _ _ VEmpty = Nothing  -- all records are a subrecord of the empty record
-subTele k z (VBind (l,_ll) r a t) (VBind (l',ll') r' a' t') = do
-  let v = case a of
-            VSingleton _ v' -> v' -- TODO: use all possible values
-            _ -> projVal l z
+subTele k zs (VBind (l,_ll) r a t) (VBind (l',ll') r' a' t') = do
+  let zl = [projVal l z | z <- zs]
+      vs = case a of
+            VSingleton _ v' -> v':zl
+            _ -> zl
   if l == l'
-    then included r r' <> sub k v a a' <> subTele (k+1) z (t v) (t' v)
-    else subTele (k+1) z (t v) (VBind (l',ll') r' a' t')
+    then included r r' <> sub k vs a a' <> anyOf [subTele (k+1) zs (t v) (t' v) | v <- vs ]
+    else anyOf [subTele (k+1) zs (t v) (VBind (l',ll') r' a' t') | v <- vs]
 subTele _ z x x' = noSub z x x'
 -- FIXME: Subtyping of records isn't complete. To be complete, one
 -- would have to create a graph representation of the dependencies in
