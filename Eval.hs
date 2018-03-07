@@ -307,7 +307,8 @@ orElse _ Nothing = Nothing
 orElse (Just x) (Just y) = Just (x <> " and " <> y)
 
 anyOf :: [Maybe D] -> Maybe D
-anyOf = foldr orElse Nothing
+anyOf [] = error "anyOf: at least one choice is necessary!"
+anyOf x = foldr1 orElse x
 
 convEnv :: Int -> Env -> Env -> Maybe D
 convEnv k e e' = mconcat $ zipWith (conv k) (valOfEnv e) (valOfEnv e')
@@ -327,7 +328,7 @@ subTele k zs (VBind (l,_ll) r a t) (VBind (l',ll') r' a' t') = do
             VSingleton _ v' -> v':zl
             _ -> zl
   if l == l'
-    then included r r' <> sub k vs a a' <> anyOf [subTele (k+1) zs (t v) (t' v) | v <- vs ]
+    then included r r' <> sub k vs a a' <> anyOf [subTele (k+1) zs (t v) (t' v) | v <- vs]
     else anyOf [subTele (k+1) zs (t v) (VBind (l',ll') r' a' t') | v <- vs]
 subTele _ z x x' = noSub z x x'
 -- FIXME: Subtyping of records isn't complete. To be complete, one

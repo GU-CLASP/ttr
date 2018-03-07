@@ -182,7 +182,7 @@ check a t = case (a,t) of
     var <- getFresh
     (a',aa') <- case aa of
       Just aaa -> do (aa',a') <- checkTypeEval aaa
-                     checkSub "lam type" [] a' a
+                     checkSub "lam type" [var] a' a
                      return (a',Just aa')
       Nothing -> return (a,Nothing)
     Lam x aa' <$> withLocal (x,r,a') (check (app f var) t)

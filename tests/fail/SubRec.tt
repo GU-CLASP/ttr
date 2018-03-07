@@ -1,0 +1,8 @@
+\(params : [ A   : Type; B : A -> Type]) -> module
+
+open params
+
+noSub : [f : A] -> [f : A; g : B f]
+noSub x = x
+
+
