@@ -22,7 +22,7 @@ emptyAgenda : Agenda
 emptyAgenda = emptyList Move
 
 demoteAgenda : ReadyAgenda -> Agenda
-demoteAgenda = demoteList Move
+demoteAgenda x = x
 
 consAgenda : Move -> Agenda -> ReadyAgenda
 consAgenda m a = (tag = true, content = (head = m, tail = a))

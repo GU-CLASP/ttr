@@ -25,7 +25,7 @@ NonEmptyList : Type -> Type
 NonEmptyList a = [ tag : True; content : List1 a ]
 
 demoteList : (a : Type) -> NonEmptyList a -> List a
-demoteList _ x = ( tag = true, content = x.content ) -- TODO: improve subtyping
+demoteList _ x = x
 
 emptyList : (a : Type) -> List a
 emptyList a = (tag = 'no, content = ())

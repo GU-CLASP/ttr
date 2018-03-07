@@ -9,7 +9,7 @@ Maybe a =  [ tag : {'yes | 'no}
            ; content : When tag a]
 
 Just : Type -> Type
-Just a = [ tag : Bool (= true) ; content : a]
+Just a = [ tag : True ; content : a]
 
 just : (a : Type) -> a -> Just a
 just _ x = ( tag = true, content = x)
@@ -17,9 +17,5 @@ just _ x = ( tag = true, content = x)
 nothing : (a : Type) -> Maybe a
 nothing _ = (tag = false, content = ())
 
-checkjustSubtype : (a : Type) -> a -> Maybe a
-checkjustSubtype a x = just a x
-
-
--- checkJustSubtype : (a : Type) -> Just a -> Maybe a
--- checkJustSubtype a x = x
+checkJustSubtype : (a : Type) -> Just a -> Maybe a
+checkJustSubtype a x = x
