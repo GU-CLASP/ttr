@@ -11,7 +11,14 @@
 
 open import Lists
 open import Kos params
+open import Maybe
 open params
+
+fulfilAgenda : InformationState /\ [ private : [ agenda : ReadyAgenda]]
+	     -> InformationState
+fulfilAgenda s = ( private = (agenda = emptyAgenda)
+	       	 , dgb     = (moves = cons Move (head Move s.private.agenda) s.dgb.moves
+		   	     , latestMove = (head Move s.private.agenda)))
 
 countergreeting : InformationState /\ [ dgb : [ latestMove : [ spkr    : Ind
                                                              ; addr    : Ind (= agent)

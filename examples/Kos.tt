@@ -25,7 +25,7 @@ demoteAgenda : ReadyAgenda -> Agenda
 demoteAgenda x = x
 
 consAgenda : Move -> Agenda -> ReadyAgenda
-consAgenda m a = (tag = true, content = (head = m, tail = a))
+consAgenda = cons Move
 
 
 InformationState : Type

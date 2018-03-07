@@ -30,6 +30,12 @@ demoteList _ x = x
 emptyList : (a : Type) -> List a
 emptyList a = (tag = 'no, content = ())
 
+cons : (a : Type) -> a -> List a -> NonEmptyList a
+cons _ m a = (tag = true, content = (head = m, tail = a))
+
+head : (a : Type) -> NonEmptyList a -> a
+head _ l = l.content.head
+
 isNil : (a : Type) -> List a -> Bool
 isNil a x = not x.tag
 
