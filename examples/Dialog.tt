@@ -1,22 +1,66 @@
+let Question : Type
+    Question = [ A : Type
+               ; Q : A -> Type
+               ]
+    Prop : Type
+    Prop = Type
+
+in
 \(params : [ Ind : Type
+           ; String : Type
            ; user0 : Ind
            ; agent : Ind
            ; greet : Ind -> Ind -> Type
 	   ; sg    : (s:Ind) -> (a:Ind) -> greet s a
 	   ; sg'   : greet agent user0
+           ; ask : Ind -> Ind -> Question -> Prop
+	   ; sask  : (s:Ind) -> (a:Ind) -> (q:Question) -> ask s a q
+               -- a situation where s asks a question q
+           ; hasName : (s:Ind) -> (name : String) -> Prop
+           ; agentName : String
+           ; sAgentName : hasName agent agentName
 	   ; emptyMove : [ spkr    : Ind
 	     	         ; addr    : Ind
 			 ; content : [] ]
            ; ]) -> module
 
+
 open import Lists
 open import Kos params
 open import Maybe
+open import Booleans
 
 open params
 
+PolQuestion : Type
+PolQuestion = [ A : Type (= Bool); Q : Bool -> Prop]
+
+WhQuestion : Type
+WhQuestion  = [ A : Type (= Ind);  Q : Ind -> Prop]
+
+nameQuestion : Question
+nameQuestion = (A = String, Q = hasName agent)
+
+askNameMove : [ spkr : Ind
+              ; addr : Ind (= agent)
+              ; content : [ q : Question (= nameQuestion)
+                          ; c : ask spkr addr nameQuestion]]
+askNameMove = (spkr = user0
+              ,addr = agent
+              ,content = (q = nameQuestion,
+                          c = sask user0 agent nameQuestion))
+
+tellNameMove : [ spkr : Ind (= agent)
+               ; addr : Ind
+               ; content : [ name : String
+                           ; c : hasName agent name ]]
+
+tellNameMove = (spkr = agent
+               ,addr = user0
+               ,content = (name = agentName, c = sAgentName))
+
 GreetingMoveContent : Ind -> Ind -> Type
-GreetingMoveContent spkr addr =  [c : greet spkr addr]
+GreetingMoveContent spkr addr = [c : greet spkr addr]
 
 greetingMove : [ spkr    : Ind ; addr : Ind (= agent) ; content : GreetingMoveContent spkr addr ]
 greetingMove = (spkr = user0, addr = agent, content = (c = sg user0 agent))
@@ -39,9 +83,15 @@ ruleSet :
   ;greeting' : InformationState  -> InformationState /\ [ dgb : [ latestMove : [ spkr    : Ind
                                                                ; addr    : Ind (= agent)
                                                                ; content : [c : greet spkr addr]]]]
-  ;initialize : [] -> InformationState]
+  ;initialize : [] -> InformationState
+  ;answerName : InformationState /\ [ dgb : [ latestMove : [ spkr    : Ind
+                                                           ; addr    : Ind (= agent)
+                                                           ; content : [q : Question;
+                                                                        c : ask spkr addr q]]]]
+                   -> (InformationState /\ [ private : [ agenda : ReadyAgenda ]])
+  ]
 
-ruleSet = 
+ruleSet =
  (fulfilAgenda = \s -> ( private = (agenda = emptyAgenda)
                        , dgb     = (moves = cons Move (head Move s.private.agenda) s.dgb.moves
                                    , latestMove = (head Move s.private.agenda)))
@@ -49,6 +99,9 @@ ruleSet =
  ,countergreeting = \r -> ( private = ( agenda = consAgenda ( spkr = agent
                                                         , addr = user0
                                                         , content = (c = sg'))
+                                                        r.private.agenda)
+                      , dgb = r.dgb )
+ ,answerName = \r -> ( private = ( agenda = consAgenda tellNameMove
                                                         r.private.agenda)
                       , dgb = r.dgb )
 
