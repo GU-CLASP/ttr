@@ -252,13 +252,18 @@ checkConv msg a v = do
       Just err -> do
         oops $ sep [hang 2 msg (pretty v), hang 2 "is convertible to " (pretty a), hang 2 "because" err]
 
+verifyIsType :: Val -> Bool
+verifyIsType VU = True
+verifyIsType (VSingleton t _) = verifyIsType t
+verifyIsType _ = False
+
 -- Check that t is a type and evaluate it.
 checkType :: Ter -> Typing CTer
 checkType t = do
   (t',a) <- relax zero (checkInfer t)
-  case a of
-   VU -> return t'
-   _ -> oops $ sep ["expected a type, but got", pretty t, "which as type",pretty a]
+  if verifyIsType a
+    then return t'
+    else oops $ sep ["expected a type, but got", pretty t, "which as type",pretty a]
 
 unsafeInfer :: TEnv -> Ter -> Val
 unsafeInfer e t = case (runInfer e t) of
@@ -309,7 +314,7 @@ checkInfer e = case e of
       Nothing -> oops $ pretty n <> " is not declared"
   App t u -> do
     (t',t'') <- checkInfer t
-    (u',retTyp) <- checkInferApp u t''
+    (u',retTyp,_) <- checkInferApp u t''
     return (App t' u', retTyp)
   Proj l t -> do
     (t',a) <- relax (zero :.. one) (checkInfer t)
@@ -332,23 +337,23 @@ checkInfer e = case e of
     return (Where t' dd,whereType)
   _ -> oops ("checkInfer " <> pretty e)
 
-
+-- | Infer the type and result of applying the argument to the function type.
 checkInferApp :: Ter -> {- argument -}
-                 Val -> {- function type -} Typing (CTer,Val)
+                 Val -> {- function type -} Typing (CTer,Val,Val)
 checkInferApp u (VPi _ r a f) = do
    (u',u'') <- relax r (checkEval a u)
-   return (u', app f u'')
--- checkInferApp u (VSingleton t v) = do
---    (u',u'') <- checkInferApp u t
---    return (u', VSingleton u'' (app v (eval u')))
+   return (u', app f u'',u'')
+checkInferApp u (VSingleton t v) = do
+   (u',u'',valOfU) <- checkInferApp u t
+   return (u', VSingleton u'' (app v valOfU), valOfU)
 checkInferApp u (VJoin x y) = do
-  (u',typ1) <- checkInferApp u x
-  (_ ,typ2) <- checkInferApp u y
-  return (u',vJoin typ1 typ2)
+  (u',typ1,_) <- checkInferApp u x
+  (_ ,typ2,valOfU) <- checkInferApp u y
+  return (u',vJoin typ1 typ2,valOfU)
 checkInferApp u (VMeet x y) = do
-  (u',typ1) <- checkInferApp u x `catchError` \_ -> checkInferApp u y
-  (_ ,typ2) <- checkInferApp u y `catchError` \_ -> return (u',typ1)
-  return (u',vMeet typ1 typ2)
+  (u',typ1,valOfU) <- checkInferApp u x `catchError` \_ -> checkInferApp u y
+  (_ ,typ2,_) <- checkInferApp u y `catchError` \_ -> return (u',typ1,valOfU)
+  return (u',vMeet typ1 typ2,valOfU)
 checkInferApp _ c = oops $ pretty c <> " is not a product"
 
 
@@ -358,6 +363,9 @@ checkInferProj l r (VMeet x y) = do
   typ1 <- checkInferProj l r x `catchError` \_ -> checkInferProj l r y
   typ2 <- checkInferProj l r y `catchError` \_ -> return typ1
   return (vMeet typ1 typ2)
+checkInferProj l r (VSingleton t u) = do
+  projType <- checkInferProj l r t
+  return (VSingleton projType (projVal l u))
 checkInferProj _ _ a = oops $ pretty a <> " is not a record-type"
 
 
