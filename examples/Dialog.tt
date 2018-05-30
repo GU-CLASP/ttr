@@ -1,9 +1,18 @@
-let Question : Type
-    Question = [ A : Type
-               ; Q : A -> Type
-               ]
+let
     Prop : Type
     Prop = Type
+
+    Question : Type
+    Question = [ A : Type  -- expected type of the answer (eg. Bool for yes/no question)
+               ; Q : A -> Prop -- proposition which describes each answer.
+                    -- eg. "Do you live in Paris?" wil be: \a -> if a then Live(Paris,x) else Not (Live(Paris,x))
+                    -- (x represents "you").
+                    -- In particular, Q yes = Live(Paris,x)
+                    -- and further, if (a : Q yes)
+                    -- then a is a proof that "you live in paris"
+                    -- (so one cannot lie when answering
+                    --  --- or at worst the proof will point to the evidence for the lie.))
+               ]
 
 in
 \(params : [ Ind : Type
@@ -50,14 +59,6 @@ askNameMove = (spkr = user0
               ,content = (q = nameQuestion,
                           c = sask user0 agent nameQuestion))
 
-tellNameMove : [ spkr : Ind (= agent)
-               ; addr : Ind
-               ; content : [ answer : String
-                           ; c : hasName agent agentName ]]
-
-tellNameMove = (spkr = agent
-               ,addr = user0
-               ,content = (answer = agentName, c = sAgentName))
 
 GreetingMoveContent : Ind -> Ind -> Type
 GreetingMoveContent spkr addr = [c : greet spkr addr]
@@ -74,16 +75,30 @@ integrateUserMove _ m s = (private = s.private, dgb = (latestMove = m, moves = c
 greet' : InformationState -> InformationState/\ [ dgb : [ latestMove : [ spkr : Ind ; addr    : Ind ; content : [c : greet spkr addr]]]]
 greet' = integrateUserMove (GreetingMoveContent user0 agent) greetingMove
 
-answerName : (is : InformationState /\ [ dgb : [ latestMove : [ spkr    : Ind
-                                                              ; addr    : Ind (= user0)
-                                                              ; content : [q : Question (= nameQuestion);
+
+tellNameMove : [ spkr : Ind
+               ; addr : Ind (= user0)
+               ; content : [ answer : String
+                           ; c : hasName agent agentName ]]
+
+tellNameMove = (spkr = agent
+               ,addr = user0
+               ,content = (answer = agentName, c = sAgentName))
+
+AnswerRule : Question -> Type
+AnswerRule question =
+             (is : InformationState /\ [ dgb : [ latestMove : [ spkr    : Ind
+                                                              ; addr    : Ind (= agent)
+                                                              ; content : [q : Question (= question);
                                                                            c : ask spkr addr q]]]])
                    -> (InformationState /\
                        [ answer : [ spkr    : Ind
-                                  ; addr    : Ind (= agent)
-                                  ; content : [a : is.dgb.latestMove.content.q.A;
-                                               c : is.dgb.latestMove.content.q.Q a]]])
-answerName = \r -> (answer = _ -- tellNameMove
+                                  ; addr    : Ind (= user0)
+                                  ; content : [answer : question.A;
+                                               c      : question.Q answer]]])
+
+answerName : AnswerRule nameQuestion
+answerName = \r -> (answer = tellNameMove
                    ,private = r.private
                    ,dgb = r.dgb )
 
