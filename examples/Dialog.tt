@@ -133,3 +133,13 @@ ruleSet =
  ,initialize = \ _ -> ( private = ( agenda = emptyAgenda)
                  , dgb     = ( moves  = emptyList Move
                              , latestMove = emptyMove)))
+
+script : InformationState
+script =
+   answerName (
+   integrateUserMove [ q : Question (= nameQuestion) ; c : ask user0 agent nameQuestion] askNameMove (
+   ruleSet.fulfilAgenda (
+   ruleSet.countergreeting (
+   integrateUserMove (GreetingMoveContent user0 agent) greetingMove (
+   ruleSet.initialize (
+   ))))))
