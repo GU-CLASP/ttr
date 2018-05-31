@@ -21,6 +21,15 @@ mutual
     'yes -> List1 a
     'no -> []
 
+mutual
+  Index : (A : Type) -> List A -> Type
+  Index A xs = Index' A xs.tag xs.content 
+
+  Index': (A : Type) -> (tag : Bool) -> (MaybeList A tag) -> Type
+  Index' A = split
+    'no -> \content -> {}
+    'yes -> \content -> [tag : {'here | 'there}; content : Index A content.tail]
+  
 NonEmptyList : Type -> Type
 NonEmptyList a = [ tag : True; content : List1 a ]
 
