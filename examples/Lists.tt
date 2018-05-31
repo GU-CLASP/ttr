@@ -45,6 +45,9 @@ cons _ m a = (tag = true, content = (head = m, tail = a))
 head : (a : Type) -> NonEmptyList a -> a
 head _ l = l.content.head
 
+tail : (a : Type) -> NonEmptyList a -> List a
+tail _ l = l.content.tail
+
 isNil : (a : Type) -> List a -> Bool
 isNil a x = not x.tag
 
