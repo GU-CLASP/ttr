@@ -286,6 +286,7 @@ conv _ x              x'           = different x x'
 -- -- @sub _ x:a b@: check that x:a also has type b.
 sub :: Int -> [Val] -> Val -> Val -> Maybe D
 sub _ _ VU VU = Nothing
+sub _ _ VBottom _ = Nothing
 sub _ _ (VSum xs) (VSum ys) = if sort xs `isSubsequenceOf` sort ys then Nothing else Just (pretty xs <+> "has more cases than" <+> pretty ys)
 sub _ _ _ (VRecordT VEmpty) = Nothing
 sub k fs (VPi _ r u v) (VPi _ r' u' v') = do
