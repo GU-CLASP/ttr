@@ -21,15 +21,10 @@ mutual
     'yes -> List1 a
     'no -> []
 
-mutual
-  Index : (A : Type) -> List A -> Type
-  Index A xs = Index' A xs.tag xs.content 
+-- TODO: figure out why this crashes.
+-- listLength : (A : Type) -> List A -> Nat
+-- listLength A xs = xs
 
-  Index': (A : Type) -> (tag : Bool) -> (MaybeList A tag) -> Type
-  Index' A = split
-    'no -> \content -> {}
-    'yes -> \content -> [tag : {'here | 'there}; content : Index A content.tail]
-  
 NonEmptyList : Type -> Type
 NonEmptyList a = [ tag : True; content : List1 a ]
 
@@ -51,6 +46,28 @@ tail _ l = l.content.tail
 isNil : (a : Type) -> List a -> Bool
 isNil a x = not x.tag
 
+mutual
+  Index : (A : Type) -> List A -> Type
+  Index A xs = Index' A xs.tag xs.content 
+
+  Index': (A : Type) -> (tag : Bool) -> (MaybeList A tag) -> Type
+  Index' A = split
+    'no -> \content -> {}
+    'yes -> \content -> [tag : {'here | 'there}; content : Index A content.tail]
+
+mutual
+  delete : (A : Type) -> (xs : List A) -> Index A xs -> List A
+  delete A xs = delete' A xs.tag xs.content
+
+  delete' : (A : Type) -> (tag : Bool) -> (xs : MaybeList A tag) -> Index' A tag xs -> List A
+  delete' A = split
+    'no -> \xs ix -> ix -- because ix : {} and {} :< X for any type X.
+    'yes -> \xs ix -> delete'' A xs ix.tag ix.content  -- xs : List1 A; ix : 
+
+  delete'' : (A : Type) -> (xs : List1 A) -> (tag : {'here | 'there}) -> Index A xs.tail -> List A
+  delete'' A xs = split
+     'here -> \_ -> xs.tail
+     'there -> \ix -> cons A xs.head (delete A xs.tail ix)
 
 -- zipWith : (a b c : Type) -> (a -> b -> c) -> List a -> List b -> List c
 -- zipWith a b c f = zip'

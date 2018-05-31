@@ -1,0 +1,20 @@
+
+-- Natural numbers defined to be subtype of lists.
+mutual
+  Nat1 : Type
+  Nat1 = [tail : Nat]
+
+  Nat : Type
+  Nat = [ tag : Bool
+           ; content : MaybeNat tag ]
+
+  MaybeNat : Bool -> Type
+  MaybeNat = split
+    'yes -> Nat1
+    'no -> []
+
+zero : Nat
+zero = (tag = 'no, content = ())
+
+succ : Nat -> Nat
+succ n = (tag = 'yes, content = (tail = n))
