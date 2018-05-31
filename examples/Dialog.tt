@@ -134,7 +134,8 @@ answerAnyRule : AnswerAnyRule
 answerAnyRule is ix a q =
               (private = is.private
               ,dgb = (qud = delete Question is.dgb.qud ix
-                     ,latestMove = dgb.latestMove)
+                     ,latestMove = is.dgb.latestMove
+                     ,moves = is.dgb.moves)
               ,answer = (answer = a, c = q))
 
 
