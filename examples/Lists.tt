@@ -69,6 +69,20 @@ mutual
      'here -> \_ -> xs.tail
      'there -> \ix -> cons A xs.head (delete A xs.tail ix)
 
+mutual
+  lookup : (A : Type) -> (xs : List A) -> Index A xs -> A
+  lookup A xs = lookup' A xs.tag xs.content
+
+  lookup' : (A : Type) -> (tag : Bool) -> (xs : MaybeList A tag) -> Index' A tag xs -> A
+  lookup' A = split
+    'no -> \xs ix -> ix -- because ix : {} and {} :< X for any type X.
+    'yes -> \xs ix -> lookup'' A xs ix.tag ix.content  -- xs : List1 A; ix : 
+
+  lookup'' : (A : Type) -> (xs : List1 A) -> (tag : {'here | 'there}) -> Index A xs.tail -> A
+  lookup'' A xs = split
+     'here -> \_ -> xs.head
+     'there -> \ix -> lookup A xs.tail ix
+
 -- zipWith : (a b c : Type) -> (a -> b -> c) -> List a -> List b -> List c
 -- zipWith a b c f = zip'
 --   where
