@@ -375,8 +375,9 @@ showVal ctx t0 = case t0 of
   (VApp _ _)   -> pp 4 (\p -> hang 2 (p u) (showArgs vs))
      where (u:vs) = fnArgs t0
   (VSplit (Ter (Split _ branches) env) v) -> sep [
-    hang 2 ("case" <+> pretty v <+> "of") (showSplitBranches env branches),
-            "with env: " <> (encloseSep "(" ")" "," (showEnv env))]
+    hang 2 ("case" <+> pretty v <+> "of") (showSplitBranches env branches)
+      -- ,"with env: " <> (encloseSep "(" ")" "," (showEnv env)) -- too noisy
+    ]
   (VVar x)     -> pretty x
   (VRecordT tele) -> pretty tele
   (VRecord fs)   -> tupled [hang 2 (pretty l <> " =") (pretty e) | (l,e) <- fs]
