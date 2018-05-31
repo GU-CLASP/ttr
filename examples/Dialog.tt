@@ -102,6 +102,42 @@ answerName = \r -> (answer = tellNameMove
                    ,private = r.private
                    ,dgb = r.dgb )
 
+
+Subtype : Type -> Type -> Type
+Subtype A B = [conv : A -> B]
+
+AnswerAnyRule : Type
+AnswerAnyRule =
+ (is : InformationState /\ [ dgb : [ qud : List Question ]]) ->
+ (questionIndex : Index Question is.dgb.qud) ->
+ (let question : Question
+      question = lookup Question is.dgb.qud questionIndex
+  in (a : question.A) ->
+     (q : question.Q a) ->
+     (InformationState /\ [ answer : [answer : question.A;
+                                      c      : question.Q answer]  ]))
+ 
+
+
+             
+               -- let
+               --    
+               --    in (a : question.A) ->
+               --       (q : question.Q a) ->
+               --          (InformationState /\
+               --              [ answer : [  [answer : question.A;
+               --                             c      : question.Q answer]]]
+               --                             )
+
+
+answerAnyRule : AnswerAnyRule
+answerAnyRule is ix a q =
+              (private = is.private
+              ,dgb = (qud = delete Question is.dgb.qud ix
+                     ,latestMove = dgb.latestMove)
+              ,answer = (answer = a, c = q))
+
+
 ruleSet :
   [fulfilAgenda : InformationState /\ [ private : [ agenda : ReadyAgenda]] -> InformationState
   ;countergreeting : InformationState /\ [ dgb : [ latestMove : [ spkr    : Ind
