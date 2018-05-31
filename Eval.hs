@@ -14,9 +14,19 @@ import Pretty
 import TT
 import Data.Monoid hiding (Sum)
 import Data.Dynamic
-import Data.Maybe (fromJust)
 import Algebra.Classes hiding (Sum)
 import Data.List (sort, isSubsequenceOf, intersect)
+
+data Err = NoErr | Err [D]
+
+instance Pretty Err where
+  pretty NoErr = "<no error!>"
+  pretty (Err errs) = encloseSep "" "" " and " errs
+
+instance Monoid Err where
+  mempty = NoErr
+  mappend (Err x) _ = Err x
+  mappend _ x = x
 
 -- | Lookup a value in the environment
 look :: Ident -> Env -> (Binder, Val)
@@ -152,8 +162,8 @@ vMeet (VRecordT fs) (VRecordT fs') | botTele x = VMeet (VRecordT fs) (VRecordT f
   where x = meetFields fs fs'
 -- vMeet (VPi nm a b) (VPi _ a' b') = VPi nm (vJoin a a') (vMeet b b') -- EQUALITY of codomain is needed
 vMeet x y = case conv 0 x y of
-              Nothing -> x
-              Just _ -> VMeet x y
+              NoErr -> x
+              Err _ -> VMeet x y
 
 hasField :: String -> VTele -> Bool
 hasField l fs = l `elem` (map fst (teleBinders fs))
@@ -219,28 +229,29 @@ projVal l (VRecord fs)    = case lookup l fs of
 projVal l u | isNeutral u = VProj l u
             | otherwise   = error $ show u ++ " should be neutral"
 
-convs :: Int -> [Val] -> [Val] -> Maybe D
+convs :: Int -> [Val] -> [Val] -> Err
 convs k a b = mconcat $ zipWith (conv k) a b
 
-satisfy :: forall a. Bool -> a -> Maybe a
-satisfy p err = if p then Nothing else Just err
+satisfy :: Bool -> [D] -> Err
+satisfy p err = if p then NoErr else Err err
 
-equal :: (Pretty a, Eq a) => a -> a -> Maybe D
-equal a b = satisfy (a == b) (fromJust $ different a b)
+equal :: (Pretty a, Eq a) => a -> a -> Err
+equal a b = satisfy (a == b) msg
+  where Err msg = different a b
 
-included :: (Pretty a, Ord a) => a -> a -> Maybe D
-included a b = satisfy (a <= b) (sep [pretty a,"⊈",pretty b])
+included :: (Pretty a, Ord a) => a -> a -> Err
+included a b = satisfy (a <= b) [sep [pretty a,"⊈",pretty b]]
 
-different :: (Pretty a) => a -> a -> Maybe D
-different a b = Just (sep [pretty a,"≠",pretty b])
+different :: (Pretty a) => a -> a -> Err
+different a b = Err [(sep [pretty a,"≠",pretty b])]
 
 noSub :: (Pretty a2, Pretty a, Pretty a1) =>
-               a2 -> a1 -> a -> Maybe D
-noSub z a b = Just $ sep [pretty a,"not a subtype of",pretty b,"when inhabitant is",pretty z]
+               a2 -> a1 -> a -> Err
+noSub z a b = Err [sep [pretty a,"not a subtype of",pretty b,"when inhabitant is",pretty z]]
 
 -- | @conv k a b@ Checks that @a@ can be converted to @b@.
-conv :: Int -> Val -> Val -> Maybe D
-conv _ VU VU = Nothing
+conv :: Int -> Val -> Val -> Err
+conv _ VU VU = NoErr
 conv k (VSingleton t v) (VSingleton t' v') = conv k t t' <> conv k v v'
 conv k (VLam _ f) (VLam _ g) = do
   let v = mkVar k
@@ -280,15 +291,15 @@ conv _ (VVar x)     (VVar x')      = x `equal` x'
 conv _ (VAbstract n) (VAbstract n') = n `equal` n'
 conv k (VJoin a b) (VJoin a' b') = (conv k a a' <> conv k b b') `orElse` (conv k a b' <> conv k b a')
 conv k (VMeet a b) (VMeet a' b') = (conv k a a' <> conv k b b') `orElse` (conv k a b' <> conv k b a')
-conv _ (VPrim _ _) (VPrim _ _) = Nothing
+conv _ (VPrim _ _) (VPrim _ _) = NoErr
 conv _ x              x'           = different x x'
 
 -- -- @sub _ x:a b@: check that x:a also has type b.
-sub :: Int -> [Val] -> Val -> Val -> Maybe D
-sub _ _ VU VU = Nothing
-sub _ _ VBottom _ = Nothing
-sub _ _ (VSum xs) (VSum ys) = if sort xs `isSubsequenceOf` sort ys then Nothing else Just (pretty xs <+> "has more cases than" <+> pretty ys)
-sub _ _ _ (VRecordT VEmpty) = Nothing
+sub :: Int -> [Val] -> Val -> Val -> Err
+sub _ _ VU VU = NoErr
+sub _ _ VBottom _ = NoErr
+sub _ _ (VSum xs) (VSum ys) = if sort xs `isSubsequenceOf` sort ys then NoErr else Err [pretty xs <+> "has more cases than" <+> pretty ys]
+sub _ _ _ (VRecordT VEmpty) = NoErr
 sub k fs (VPi _ r u v) (VPi _ r' u' v') = do
   let w = mkVar k
   included r' r <> sub k [w] u' u  <> sub (k+1) [app f w | f <- fs] (app v w) (app v' w)
@@ -302,27 +313,27 @@ sub k x t (VSingleton t' v') = sub k x t t' <> anyOf (map (conv k v') x)
 sub k _ x x' = conv k x x'
 
 
-orElse :: Maybe D -> Maybe D -> Maybe D
-orElse Nothing _ = Nothing
-orElse _ Nothing = Nothing
-orElse (Just x) (Just y) = Just (x <> " and " <> y)
+orElse :: Err -> Err -> Err
+orElse NoErr _ = NoErr
+orElse _ NoErr = NoErr
+orElse (Err x) (Err y) = Err (x++y)
 
-anyOf :: [Maybe D] -> Maybe D
+anyOf :: [Err] -> Err
 anyOf [] = error "anyOf: at least one choice is necessary!"
 anyOf x = foldr1 orElse x
 
-convEnv :: Int -> Env -> Env -> Maybe D
+convEnv :: Int -> Env -> Env -> Err
 convEnv k e e' = mconcat $ zipWith (conv k) (valOfEnv e) (valOfEnv e')
 
-convTele :: Int -> VTele -> VTele -> Maybe D
-convTele _ VEmpty VEmpty = Nothing
+convTele :: Int -> VTele -> VTele -> Err
+convTele _ VEmpty VEmpty = NoErr
 convTele k (VBind (l,_) r a t) (VBind (l',_) r' a' t') = do
   let v = mkVar k
   equal r r' <> equal l l' <> conv k a a' <> convTele (k+1) (t v) (t' v)
 convTele _ x x' = different x x'
 
-subTele :: Int -> [Val] -> VTele -> VTele -> Maybe D
-subTele _ _ _ VEmpty = Nothing  -- all records are a subrecord of the empty record
+subTele :: Int -> [Val] -> VTele -> VTele -> Err
+subTele _ _ _ VEmpty = NoErr  -- all records are a subrecord of the empty record
 subTele k zs (VBind (l,_ll) r a t) (VBind (l',ll') r' a' t') = do
   let zl = [projVal l z | z <- zs]
       vs = case a of
@@ -336,8 +347,8 @@ subTele _ z x x' = noSub z x x'
 -- would have to create a graph representation of the dependencies in
 -- a record, and then check the covering of the graphs.
 
-convFields :: Int -> [(String,Val)] -> [(String,Val)] -> Maybe D
-convFields _ [] [] = Nothing
+convFields :: Int -> [(String,Val)] -> [(String,Val)] -> Err
+convFields _ [] [] = NoErr
 convFields k ((l,u):fs) ((l',u'):fs') = equal l l' <> conv k u u' <> convFields k fs fs'
 convFields _ x x' = different x x'
 
