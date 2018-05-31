@@ -1,6 +1,8 @@
+{-# LANGUAGE EmptyCase #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE PatternSynonyms, OverloadedStrings #-}
 module TT where
 
@@ -9,6 +11,7 @@ import Data.Monoid
 import Data.Dynamic
 import Pretty 
 import Algebra.Classes hiding (Sum)
+import Data.List ((\\), nub)
 type CheckedDecls = (TDecls Val,[Val],VTele)
 data ModuleState
   = Loaded {moduleValue, moduleType :: Val}
@@ -94,6 +97,41 @@ data Ter' a = App (Ter' a) (Ter' a)
             | Singleton (Ter' a) (Ter' a)
 
   deriving (Eq)
+
+class Term a where
+  freeVars :: a -> [Ident]
+
+instance Term (TDecls a) where
+  freeVars = \case
+    Mutual ts -> concat [freeVars s ++ freeVars t | (_,s,t) <- ts]
+    Open _ t -> freeVars t
+
+uniqSplitFVs :: [Brc a] -> [Ident]
+uniqSplitFVs = nub . concatMap (freeVars . snd)
+
+instance Term (Ter' a) where
+  freeVars = \case
+     (Singleton s t) -> freeVars s ++ freeVars t
+     (Import _ _) -> []
+     (Real _) -> []
+     (Meet s t) -> freeVars s ++ freeVars t
+     (Join s t) -> freeVars s ++ freeVars t
+     (Split _ ts) -> concatMap (freeVars . snd) ts
+     (TT.Sum _) -> []
+     (Undef _) -> []
+     (Prim _) -> []
+     (Module t) -> concatMap freeVars t
+     (Var x) -> [x]
+     U -> []
+     (Con _) -> []
+     (RecordT fs) -> concat [freeVars t | (_,_,t) <- fs]
+     (Record fs) -> concat $ map (freeVars . snd) fs
+     (Proj _ t) -> freeVars t
+     (Where t u) -> freeVars t ++ concatMap freeVars u
+     App s t -> freeVars s ++ freeVars t
+     Pi _ _ s t  -> freeVars s ++ freeVars t
+     Lam (x,_) s t -> (maybe [] freeVars s ++ freeVars t) \\ [x]
+
 
 --------------------------------------------------------------------------------
 -- | Values
@@ -225,7 +263,7 @@ lookupIdent x defs = lookup x [ (y,((y,l),t)) | ((y,l),t) <- defs]
 getIdent :: Ident -> [(Binder,a)] -> Maybe a
 getIdent x defs = snd <$> lookupIdent x defs
 
-valOfEnv :: Env -> [Val]
+valOfEnv :: Env -> [(Ident,Val)]
 valOfEnv Empty            = []
 valOfEnv (PDef _ env)     = valOfEnv env
-valOfEnv (Pair env (_,v)) = v : valOfEnv env
+valOfEnv (Pair env ((x,_),v)) = (x,v) : valOfEnv env

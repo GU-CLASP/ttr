@@ -271,11 +271,11 @@ conv k (Ter (Lam x _ u) e) u' = do
 conv k u' (Ter (Lam x _ u) e) = do
   let v = mkVar k
   conv (k+1) (app u' v) (eval (Pair e (x,v)) u)
-conv k (Ter (Split p _) e) (Ter (Split p' _) e') =
-  (p `equal` p') <> convEnv k e e'
+conv k (Ter (Split p t) e) (Ter (Split p' _t') e') =
+  (p `equal` p') <> convEnv (uniqSplitFVs t) k e e' -- note : p == p'  --->  t == t'
 conv _ (VSum p)   (VSum p') = equal p p'
 conv k (Ter (Undef p) e) (Ter (Undef p') e') =
-  (p `equal` p') <> convEnv k e e'
+  (p `equal` p')
 conv k (VPi _ r u v) (VPi _ r' u' v') = do
   let w = mkVar k
   equal r r' <> conv k u' u  <> conv (k+1) (app v w) (app v' w)
@@ -322,8 +322,13 @@ anyOf :: [Err] -> Err
 anyOf [] = error "anyOf: at least one choice is necessary!"
 anyOf x = foldr1 orElse x
 
-convEnv :: Int -> Env -> Env -> Err
-convEnv k e e' = mconcat $ zipWith (conv k) (valOfEnv e) (valOfEnv e')
+convEnv :: [Ident] -> Int -> Env -> Env -> Err
+convEnv xs k e e' = mconcat $ zipWith convMaybe (valOfFreeEnv e) (valOfFreeEnv e') where
+  valOfFreeEnv env = [lookup x ee | x <- xs]
+    where ee = valOfEnv env
+  convMaybe Nothing Nothing = NoErr
+  convMaybe (Just x) (Just y) = conv k x y
+  convMaybe _ _ = Err ["Variable found in one env but not the other"]
 
 convTele :: Int -> VTele -> VTele -> Err
 convTele _ VEmpty VEmpty = NoErr
@@ -369,8 +374,9 @@ showVal ctx t0 = case t0 of
      else (showVal 2 a  <+> "->") </> p (f `app` (VVar "_"))
   (VApp _ _)   -> pp 4 (\p -> hang 2 (p u) (showArgs vs))
      where (u:vs) = fnArgs t0
-  (VSplit (Ter (Split _ branches) env) v) -> hang 2 ("case" <+> pretty v <+> "of") (showSplitBranches env branches)
-    -- (showSplitBranches env branches)
+  (VSplit (Ter (Split _ branches) env) v) -> sep [
+    hang 2 ("case" <+> pretty v <+> "of") (showSplitBranches env branches),
+            "with env: " <> (encloseSep "(" ")" "," (showEnv env))]
   (VVar x)     -> pretty x
   (VRecordT tele) -> pretty tele
   (VRecord fs)   -> tupled [hang 2 (pretty l <> " =") (pretty e) | (l,e) <- fs]
