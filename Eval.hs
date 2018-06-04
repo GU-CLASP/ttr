@@ -391,6 +391,7 @@ showVal ctx t0 = case t0 of
        pp opPrec k = prn opPrec (k (showVal opPrec))
        prn opPrec = (if opPrec < ctx then parens else id)
 
+fnArgs :: Val -> [Val]
 fnArgs (VApp u v) = fnArgs u ++ [v]
 fnArgs x = [x]
 
