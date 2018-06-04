@@ -6,7 +6,7 @@ let
     Question = [ A : Type  -- expected type of the answer (eg. Bool for yes/no question)
                ; Q : A -> Prop -- proposition which describes each answer.
                ]
-                    -- eg.  
+                    -- eg.
                     -- [["Do you live in Paris?"]] =
                     --  (A = Bool
                     --  ;Q = \a -> if a then Live(Paris,x) else Not (Live(Paris,x)) )
@@ -58,8 +58,14 @@ open import Booleans
 
 open params
 
+-- interpretUtterance : Utterance -> Context -> [A : Type; c : Type]
 -- resolution : Utterance -> (q : Question) -> Maybe (Answer q)
 -- partialResolution : Utterance -> (q : Question) -> Maybe [q2 : Question ; c : Answer q2 -> Answer q]
+
+-- classifier : Utterance -> (q : Question) -> DisjointChoice
+--   [A : Type; c : Type]                          -- not related to the question
+--   [Answer q]                                    -- question fully resolved
+--   [q2 : Question ; c : Answer q2 -> Answer q]   -- question partially resolved
 
 PolQuestion : Type
 PolQuestion = [ A : Type (= Bool); Q : Bool -> Prop]
