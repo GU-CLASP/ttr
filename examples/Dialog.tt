@@ -5,14 +5,31 @@ let
     Question : Type
     Question = [ A : Type  -- expected type of the answer (eg. Bool for yes/no question)
                ; Q : A -> Prop -- proposition which describes each answer.
-                    -- eg. "Do you live in Paris?" wil be: \a -> if a then Live(Paris,x) else Not (Live(Paris,x))
-                    -- (x represents "you").
-                    -- In particular, Q yes = Live(Paris,x)
-                    -- and further, if (a : Q yes)
-                    -- then a is a proof that "you live in paris"
-                    -- (so one cannot lie when answering
-                    --  --- or at worst the proof will point to the evidence for the lie.))
                ]
+                    -- eg.  
+                    -- [["Do you live in Paris?"]] =
+                    --  (A = Bool
+                    --  ;Q = \a -> if a then Live(Paris,x) else Not (Live(Paris,x)) )
+                    -- (were x represents "you").
+                    -- In particular, Q yes = Live(Paris,x)
+                    -- [["Where do you live?"]] =
+                    --  (A = City
+                    --  ;Q = \a -> Live(a,x))
+
+    Answer : Question -> Type
+    Answer q = [ answer : q.A
+               ; c      : q.Q answer ]
+               -- Continuing the example. Assume
+               --  a : Answer [["Do you live in Paris?"]]
+               --  a : [ answer : Bool; c : if answer then Live(Paris,x) else Not (Live(Paris,x))]
+               --  a = (answer = yes,
+               --       c = ... a is a proof of Live(Paris,x))
+               -- (so one cannot lie when answering
+               --   or at worst the proof will point to the evidence for the lie.)
+               --
+               -- a : Answer [["Where do you live?"]]
+               -- a : [ answer : City; c : Live(answer,x)]
+               -- a = (answer = Paris; c ... (same proof as above))
 
 in
 \(params : [ Ind : Type
@@ -41,6 +58,9 @@ open import Booleans
 
 open params
 
+-- resolution : Utterance -> (q : Question) -> Maybe (Answer q)
+-- partialResolution : Utterance -> (q : Question) -> Maybe [q2 : Question ; c : Answer q2 -> Answer q]
+
 PolQuestion : Type
 PolQuestion = [ A : Type (= Bool); Q : Bool -> Prop]
 
@@ -58,7 +78,6 @@ askNameMove = (spkr = user0
               ,addr = agent
               ,content = (q = nameQuestion,
                           c = sask user0 agent nameQuestion))
-
 
 GreetingMoveContent : Ind -> Ind -> Type
 GreetingMoveContent spkr addr = [c : greet spkr addr]
@@ -78,8 +97,7 @@ greet' = integrateUserMove (GreetingMoveContent user0 agent) greetingMove
 
 tellNameMove : [ spkr : Ind
                ; addr : Ind (= user0)
-               ; content : [ answer : String
-                           ; c : hasName agent agentName ]]
+               ; content : Answer nameQuestion]
 
 tellNameMove = (spkr = agent
                ,addr = user0
@@ -94,8 +112,7 @@ AnswerRule question =
                    -> (InformationState /\
                        [ answer : [ spkr    : Ind
                                   ; addr    : Ind (= user0)
-                                  ; content : [answer : question.A;
-                                               c      : question.Q answer]]])
+                                  ; content : Answer question]])
 
 answerName : AnswerRule nameQuestion
 answerName = \r -> (answer = tellNameMove
@@ -112,31 +129,16 @@ AnswerAnyRule =
  (questionIndex : Index Question is.dgb.qud) ->
  (let question : Question
       question = lookup Question is.dgb.qud questionIndex
-  in (a : question.A) ->
-     (q : question.Q a) ->
-     (InformationState /\ [ answer : [answer : question.A;
-                                      c      : question.Q answer]  ]))
- 
-
-
-             
-               -- let
-               --    
-               --    in (a : question.A) ->
-               --       (q : question.Q a) ->
-               --          (InformationState /\
-               --              [ answer : [  [answer : question.A;
-               --                             c      : question.Q answer]]]
-               --                             )
-
+  in (answer : Answer question) ->
+     (InformationState /\ [answer : Answer question]))
 
 answerAnyRule : AnswerAnyRule
-answerAnyRule is ix a q =
+answerAnyRule is ix a =
               (private = is.private
               ,dgb = (qud = delete Question is.dgb.qud ix
                      ,latestMove = is.dgb.latestMove
                      ,moves = is.dgb.moves)
-              ,answer = (answer = a, c = q))
+              ,answer = a)
 
 
 ruleSet :
