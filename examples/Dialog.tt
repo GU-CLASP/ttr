@@ -64,6 +64,11 @@ open import Booleans
 
 open params
 
+nonDescriptQuestion : Question
+nonDescriptQuestion = (A = Prop, Q = \a -> a)
+
+-- Answer nonDescriptQuestion = [answer : Prop; sit : answer]
+
 -- interpretUtterance : Utterance -> Context -> [A : Type; c : Type]
 -- resolution : Utterance -> (q : Question) -> Maybe (Answer q)
 -- partialResolution : Utterance -> (q : Question) -> Maybe [q2 : Question ; c : Answer q2 -> Answer q]
