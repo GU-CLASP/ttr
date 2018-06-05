@@ -34,6 +34,12 @@ let
 in
 \(params : [ Ind : Type
            ; String : Type
+           ; City : Type
+           ; paris : City
+           ; london : City
+           ; Time : Type
+           ; tomorrow : Time
+           ; Travel : [from : City; to : City; time : Time] -> Prop
            ; user0 : Ind
            ; agent : Ind
            ; greet : Ind -> Ind -> Type
@@ -61,6 +67,27 @@ open params
 -- interpretUtterance : Utterance -> Context -> [A : Type; c : Type]
 -- resolution : Utterance -> (q : Question) -> Maybe (Answer q)
 -- partialResolution : Utterance -> (q : Question) -> Maybe [q2 : Question ; c : Answer q2 -> Answer q]
+
+PartialAnswer : (q : Question) -> Type
+PartialAnswer q = [q2 : Question ; c : Answer q2 -> Answer q]
+
+travelQuestion : Question
+travelQuestion = (A = [from : City; to : City; time : Time]
+                 ,Q = \a -> Travel a)
+
+partialTravelQuestion : Question
+partialTravelQuestion = (A = [from : City; time : Time]
+                        ,Q = \a -> Travel (to = paris, from = a.from, time = a.time))
+
+toParis : PartialAnswer travelQuestion
+toParis = (q2 = partialTravelQuestion
+          ,c = \a -> (answer = (to = paris, from = a.answer.from, time = a.answer.time)
+                     ,c = a.c))
+
+fromLondonTomorrow : Answer partialTravelQuestion
+fromLondonTomorrow = (answer = (from = london, time = tomorrow)
+                     ,c = _)
+
 
 -- classifier : Utterance -> (q : Question) -> DisjointChoice
 --   [A : Type; c : Type]                          -- not related to the question
