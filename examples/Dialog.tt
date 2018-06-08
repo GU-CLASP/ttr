@@ -40,6 +40,11 @@ in
            ; Time : Type
            ; tomorrow : Time
            ; Travel : [from : City; to : City; time : Time] -> Prop
+           ; Food : Type
+           ; Drink : Type
+           ; beer : Drink
+           ; chips : Food
+           ; Order : Food -> Drink -> Prop
            ; user0 : Ind
            ; agent : Ind
            ; greet : Ind -> Ind -> Type
@@ -92,6 +97,26 @@ toParis = (q2 = partialTravelQuestion
 fromLondonTomorrow : Answer partialTravelQuestion
 fromLondonTomorrow = (answer = (from = london, time = tomorrow)
                      ,c = _)
+
+
+barQuestion : Question
+barQuestion = (A = [food : Food; drink : Drink]
+              -- ,Q = \a -> WantToEat a.food /\ WantToDrink a.drink
+              ,Q = \a -> Order a.food a.drink
+              )
+
+continuedBarQuestion : Question
+continuedBarQuestion = (A = Food
+                       ,Q = \a -> Order a beer)
+
+beerAnswer : PartialAnswer barQuestion
+beerAnswer = (q2 = continuedBarQuestion
+             ,c = \a -> (answer = (drink = beer, food = a.answer)
+                        ,c = a.c))
+
+chipsAnswer : Answer partialTravelQuestion
+chipsAnswer = (answer = (from = london, time = tomorrow)
+              ,c = _)
 
 
 -- classifier : Utterance -> (q : Question) -> DisjointChoice
