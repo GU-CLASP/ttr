@@ -114,8 +114,8 @@ beerAnswer = (q2 = continuedBarQuestion
              ,c = \a -> (answer = (drink = beer, food = a.answer)
                         ,c = a.c))
 
-chipsAnswer : Answer partialTravelQuestion
-chipsAnswer = (answer = (from = london, time = tomorrow)
+chipsAnswer : Answer continuedBarQuestion
+chipsAnswer = (answer = chips
               ,c = _)
 
 
