@@ -1,6 +1,7 @@
 let
     open import Booleans
     open import Maybe
+    open import Nats
 in
 
 module

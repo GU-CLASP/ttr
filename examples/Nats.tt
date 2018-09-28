@@ -1,3 +1,8 @@
+let
+    open import Booleans
+in
+
+module
 
 -- Natural numbers defined to be subtype of lists.
 mutual
