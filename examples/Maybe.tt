@@ -19,3 +19,9 @@ nothing _ = (tag = false, content = ())
 
 checkJustSubtype : (a : Type) -> Just a -> Maybe a
 checkJustSubtype a x = x
+
+
+-- mapMaybe : (A B : Type) -> (A -> B) -> Maybe A -> Maybe B
+-- mapMaybe A B f = split
+--   nothing _ -> 'nothing ()
+--   yes x -> 'yes (f x)

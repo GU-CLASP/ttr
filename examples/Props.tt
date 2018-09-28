@@ -1,3 +1,8 @@
+let
+    open import Booleans
+    open import Maybe
+in
+
 module
 
 Bot : Type  -- do not move this type otherwise it won't be found by primops.
@@ -10,7 +15,8 @@ Not : Type -> Type
 Not T = T -> Bot
 
 Dec : Type -> Type
-Dec T = {yes T | no (Not T)}
+Dec T = [ tag : Bool;
+          content : if Type tag T (Not T)]
 
 Decidable : (T : Type) -> (P : T -> Type) -> Type
 Decidable T P = (x : T) -> Dec (P x)
@@ -21,28 +27,23 @@ Austinian = [ sitType : Type ; sit : sitType ]
 Classifiable : Type -> Type
 Classifiable S = (s : S) -> Austinian
 
+
+decToClass' : (T : Type) -> (tag : Bool) -> if Type tag T (Not T) -> Austinian
+decToClass' T = split
+  'yes -> \p -> (sitType = T,        sit = p)
+  'no  -> \q -> (sitType = Not T,    sit = q)
+
+
 decToClass : (T : Type) -> Dec T -> Austinian
-decToClass T =
-   split
-      yes p -> (sitType = T,        sit = p)
-      no  q -> (sitType = T -> Bot, sit = q)
+decToClass T d = decToClass' T d.tag d.content
 
 
 decBot : Dec Bot
-decBot = 'no (\p -> p)
+decBot = (tag = 'no, content = \p -> p)
 
 decTop : Dec Top
-decTop = 'yes ()
+decTop = (tag = 'yes, content = ())
 
-Maybe : Type -> Type
-Maybe T = {yes T | nothing []}
 
-mapMaybe : (A B : Type) -> (A -> B) -> Maybe A -> Maybe B
-mapMaybe A B f = split
-  nothing _ -> 'nothing ()
-  yes x -> 'yes (f x)
-
-decToMaybe : (T : Type) -> Dec T -> Maybe T
-decToMaybe T = split
-  yes x -> 'yes x
-  no _ -> 'nothing ()
+-- decToMaybe : (T : Type) -> Dec T -> Maybe T
+-- decToMaybe T x = x
