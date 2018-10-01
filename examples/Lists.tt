@@ -22,9 +22,8 @@ mutual
     'yes -> List1 a
     'no -> []
 
--- TODO: figure out why this crashes.
--- listLength : (A : Type) -> List A -> Nat
--- listLength A xs = xs
+listLength : (A : Type) -> List A -> Nat
+listLength A xs = xs
 
 NonEmptyList : Type -> Type
 NonEmptyList a = [ tag : True; content : List1 a ]

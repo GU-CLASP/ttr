@@ -5,7 +5,7 @@ When : Bool -> Type -> Type
 When tag a = if Type tag a []
 
 Maybe : Type -> Type
-Maybe a =  [ tag : {'yes | 'no}
+Maybe a =  [ tag : Bool
            ; content : When tag a]
 
 Just : Type -> Type

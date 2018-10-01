@@ -24,7 +24,7 @@ import Control.Monad.Except
 import Control.Monad.Reader
 
 data Proot a = NoErr a | Err [D] deriving Functor
-type Assumption = ()
+type Assumption = ((Loc,Loc),(Env,Env))
 newtype ConvM a = ConvM {fromConvM :: ReaderT [Assumption] Proot a}
   deriving (Functor,Monad,Applicative,Alternative,MonadError D,MonadReader [Assumption])
 type Err = ConvM ()
@@ -304,7 +304,7 @@ conv k (Ter (Lam x _ u) e) u' = do
 conv k u' (Ter (Lam x _ u) e) = do
   let v = mkVar k
   conv (k+1) (app u' v) (eval (Pair e (x,v)) u)
-conv k (Ter (Split p t) e) (Ter (Split p' _t') e') =
+conv k (Ter (Split p t) e) (Ter (Split p' _t') e') = 
   (p `equal` p') >> convEnv (uniqSplitFVs t) k e e' -- note : p == p'  --->  t == t'
 conv _ (VSum p)   (VSum p') = equal p p'
 conv _k (Ter (Undef p) _e) (Ter (Undef p') _e') =
@@ -343,8 +343,23 @@ sub k x c (VMeet a b) = sub k x c a >> sub k x c b
 sub k x (VMeet a b) c = sub k x a c <|> sub k x b c
 sub k x (VSingleton t v) t' = sub k (v:x) t t'
 sub k x t (VSingleton t' v') = sub k x t t' >> anyOf (map (conv k v') x)
+sub k x (VSplit u v) (VSplit u' v') = conv k v v' >> sub k x u u'
+sub k x a@(Ter (Split p t) e) a'@(Ter (Split p' t') e') = conv k a a' <|> do
+  subs <- ask
+  -- Did we already consider this subtyping problem (p ⊑ p')?
+  case lookup (p,p') subs of
+    Just (rho,rho') -> do -- Yes...
+      -- Was it in the same environment?
+      convEnv (uniqSplitFVs t) k e rho
+      convEnv (uniqSplitFVs t') k e' rho'
+      -- If no, then we must bail out (or we could recurse forever.)
+    Nothing ->
+      local (((p,p'),(e,e')):) $ -- no; let's remember that we considered it, in the envs (e,e')
+        forM_ t $ \(lbl,b) -> do -- check each branch for subtyping.
+          case lookup lbl t' of
+            Just b' -> sub k x (eval e b) (eval e' b')
+            Nothing -> error "sub: Split: panic"
 sub k _ x x' = conv k x x'
-
 
 
 anyOf :: [Err] -> Err
