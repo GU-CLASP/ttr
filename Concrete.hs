@@ -5,7 +5,7 @@ module Concrete where
 
 import Exp.Abs
 import qualified TT as C
-import TT (Interval(..), Rig, free, BNat(..))
+import TT (Interval(..), Rig, BNat(..), PolarPair(..))
 import Pretty
 
 import Control.Monad.Trans.RWS
@@ -48,16 +48,21 @@ unApps u         ws = (u, ws)
 pseudoIdents :: Exp -> Maybe [AIdent]
 pseudoIdents = mapM unVar . uncurry (:) . flip unApps []
 
+decodeWeight :: Weight -> Rig
+decodeWeight (Exact amount) = PolarPair (Fin amount :.. Fin amount) (Fin amount :.. Fin amount)
+decodeWeight Positive = PolarPair C.FreeInterval C.ZeroIntvl
+decodeWeight Negative = PolarPair C.ZeroIntvl C.FreeInterval
+
 pseudoTele :: [PseudoTDecl] -> Maybe Tele
 pseudoTele []                         = return []
-pseudoTele (WPseudoTDecl expr amount typ : pd) = do
+pseudoTele (WPseudoTDecl expr weight typ : pd) = do
     ids <- pseudoIdents expr
     pt  <- pseudoTele pd
-    return $ map (,Fin amount :.. Fin amount,typ) ids ++ pt
+    return $ map (,decodeWeight weight,typ) ids ++ pt
 pseudoTele (PseudoTDecl expr typ : pd) = do
     ids <- pseudoIdents expr
     pt  <- pseudoTele pd
-    return $ map (,free,typ) ids ++ pt
+    return $ map (,C.Free,typ) ids ++ pt
 
 -------------------------------------------------------------------------------
 -- | Resolver and environment
@@ -113,7 +118,7 @@ resolveExp (Record t)  = case pseudoTele t of
 resolveExp (Pi t b)     =  case pseudoTele [t] of
   Just tele -> binds C.Pi tele (resolveExp b)
   Nothing   -> throwError "Telescope malformed in Pi"
-resolveExp (Fun a b)    = bind C.Pi (AIdent ((0,0),"_"), free, a) (resolveExp b)
+resolveExp (Fun a b)    = bind C.Pi (AIdent ((0,0),"_"), C.Free, a) (resolveExp b)
 resolveExp (LFun a b)   = bind C.Pi (AIdent ((0,0),"_"), one, a) (resolveExp b)
 resolveExp (Lam x xs t) = do
   lams (x:xs) (resolveExp t)
@@ -178,7 +183,7 @@ resolveMutuals decls = do
   where
     idents = [ x | DeclType x _ <- decls ]
     names  = [ unAIdent x | x <- idents ]
-    tdecls = [ (x,free,t) | DeclType x t <- decls ]
+    tdecls = [ (x,C.Free,t) | DeclType x t <- decls ]
     ddecls = filter (not . isTDecl) decls
     isTDecl d = case d of DeclType{} -> True; _ -> False
 

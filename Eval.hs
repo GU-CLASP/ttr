@@ -152,8 +152,10 @@ pattern VTop = VRecordT VEmpty
 infixr -->
 (-->) :: Val -> Val -> Val
 a --> b = pi "_" a $ \_ -> b
+
 pi :: String -> Val -> (Val -> Val) -> Val
-pi nm a f = VPi nm free a $ VLam nm f
+pi nm a f = VPi nm Free a $ VLam nm f
+
 lkPrimTy :: String -> Val
 lkPrimTy "-" = real --> real --> real
 lkPrimTy "+" = real --> real --> real
@@ -466,8 +468,8 @@ prettyTele VEmpty = []
 prettyTele (VBind (nm,_l) r ty rest) = (pretty nm <+> prettyBind r <+> pretty ty) : prettyTele (rest $ VVar nm)
 
 prettyBind :: Rig -> D
-prettyBind (Fin 0 :.. Inf) = ":"
-prettyBind r = ":" <> pretty r
+prettyBind Free = ":"
+prettyBind r = "::" <> pretty r
 
 instance Pretty VTele where
   pretty = encloseSep "[" "]" ";" . prettyTele

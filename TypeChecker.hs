@@ -317,7 +317,7 @@ checkInfer e = case e of
     (u',retTyp,_) <- checkInferApp u t''
     return (App t' u', retTyp)
   Proj l t -> do
-    (t',a) <- relax (zero :.. one) (checkInfer t)
+    (t',a) <- relax (neutral (zero :.. one)) (checkInfer t)
     e <- asks env
     (Proj l t',) <$> checkInferProj l (eval e t') a
   Meet t u -> do

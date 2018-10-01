@@ -64,7 +64,7 @@ declTers :: Decls a -> [Ter' a]
 declTers decl = [ d | (_,_,d) <- decl]
 
 declTele :: Decls a -> Tele a
-declTele decl = [ (x,free,t) | (x,t,_) <- decl]
+declTele decl = [ (x,Free,t) | (x,t,_) <- decl]
 
 declDefs :: Decls () -> [(Binder,Ter)]
 declDefs decl = [ (x,d) | (x,_,d) <- decl]
@@ -150,14 +150,24 @@ teleBinders (VBind x _ _ f) = x:teleBinders (f $ error "teleBinders: cannot look
 teleBinders _ = []
 
 data Interval a = a :.. a deriving (Eq,Show)
+
 data BNat = Fin Integer | Inf deriving (Eq,Show)
-type Rig = Interval BNat
+type BNatInterval = Interval BNat
+type Rig = PolarPair (BNatInterval)
 
-pattern Free :: Interval BNat
-pattern Free = Fin 0 :.. Inf
+data PolarPair a = PolarPair a a deriving (Eq,Show)
 
-free :: Interval BNat
-free = zero :.. Inf
+neutral :: a -> PolarPair a
+neutral x = PolarPair x x
+
+pattern FreeInterval :: Interval BNat
+pattern FreeInterval = (Fin 0 :.. Inf)
+
+pattern Free :: PolarPair (Interval BNat)
+pattern Free = PolarPair FreeInterval FreeInterval
+
+pattern ZeroIntvl :: Interval BNat
+pattern ZeroIntvl = Fin 0 :.. Fin 0
 
 instance AbelianAdditive BNat
 instance Additive BNat where
@@ -182,13 +192,28 @@ instance (Eq a, Pretty a) => Pretty (Interval a) where
   pretty (x :.. y) | x == y = pretty x
                    | otherwise = pretty x <> ".." <> pretty y
 
-instance Additive Rig where
+instance Pretty Rig where
+  pretty (PolarPair ZeroIntvl FreeInterval) = "-"
+  pretty (PolarPair FreeInterval ZeroIntvl) = "+"
+  pretty (PolarPair x y)
+    | x == y = pretty x
+    | otherwise = "+" <> pretty x <> " -" <> pretty y
+
+
+instance Additive a => Additive (Interval a) where
   a :.. b + c :.. d = (a+c) :.. (b+d)
   zero = zero :.. zero
 
-instance Multiplicative Rig where
+instance Multiplicative a => Multiplicative (Interval a) where
   a :.. b * c :.. d = (a*c) :.. (b*d)
   one = one :.. one
+
+instance Additive a => Additive (PolarPair a) where
+  a `PolarPair` b + c `PolarPair` d = (a+c) `PolarPair` (b+d)
+  zero = zero `PolarPair` zero
+instance (Additive a,Lattice a,Multiplicative a) => Multiplicative (PolarPair a) where
+  a `PolarPair` b * c `PolarPair` d = (a*c \/ b*d) `PolarPair` (a*d \/ b*c)
+  one = one `PolarPair` zero
 
 class Lattice a where
   (/\) :: a -> a -> a
@@ -211,12 +236,19 @@ instance Lattice a => Lattice (Interval a) where
   (a :.. b) /\ (c :.. d) = (a \/ c) :.. (b /\ d)
   (a :.. b) \/ (c :.. d) = (a /\ c) :.. (b \/ d)
 
+instance Lattice a => Lattice (PolarPair a) where
+  (a `PolarPair` b) /\ (c `PolarPair` d) = (a /\ c) `PolarPair` (b /\ d)
+  (a `PolarPair` b) \/ (c `PolarPair` d) = (a \/ c) `PolarPair` (b \/ d)
+
 instance Ord BNat where
   _ <= Inf = True
   Inf <= _ = False
   Fin x <= Fin y = x <= y
-instance Ord Rig where
+instance Ord a => Ord (Interval a) where
   a :.. b <= c :.. d = c <= a && b <= d
+
+instance Ord a => Ord (PolarPair a) where
+  PolarPair a b <= PolarPair c d = a <= c && b <= d
 data Val = VU
          | Ter CTer Env
          | VPi String Rig Val Val

@@ -1,9 +1,6 @@
 module
 open import Booleans
 
-When : Bool -> Type -> Type
-When tag a = if Type tag a []
-
 Maybe : Type -> Type
 Maybe a =  [ tag : Bool
            ; content : When tag a]

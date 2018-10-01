@@ -56,7 +56,11 @@ separator Label "|" ;
 -- Nonempty telescopes with Exp:s, this is hack to avoid ambiguities
 -- in the grammar when parsing Pi
 PseudoTDecl.  PseudoTDecl ::=  Exp ":" Exp ;
-WPseudoTDecl. PseudoTDecl ::=  Exp "::" Integer Exp ;
+WPseudoTDecl. PseudoTDecl ::=  Exp "::" Weight Exp ;
+
+Positive. Weight ::= "+" ;
+Negative. Weight ::= "-" ;
+Exact.    Weight ::= Integer ;
 
 separator PseudoTDecl ";" ;
 

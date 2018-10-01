@@ -8,7 +8,7 @@ IsTrue = split
            'yes -> []
            'no -> {}
 
-iffliped : (a : Type) -> a -> a -> Bool -> a
+iffliped : (a : Type) -> (x ::+ a) -> (y ::+ a) -> Bool -> a
 iffliped _ x y = split
        	 'yes -> x
 	 'no -> y
@@ -18,7 +18,7 @@ not = split
   'yes -> 'no
   'no -> 'yes
 
-if : (a : Type) -> Bool -> a -> a -> a
+if : (a : Type) -> Bool -> (x ::+ a) -> (y ::+ a) -> a
 if a c x y = iffliped a x y c
 
 True : Type
@@ -29,3 +29,6 @@ true = 'yes
 
 false : Bool
 false = 'no
+
+When : Bool -> (a :: + Type) -> Type
+When tag a = if Type tag a []
