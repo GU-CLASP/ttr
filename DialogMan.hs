@@ -27,7 +27,7 @@ tryApplyRule (binder,ruleVal,ruleType) (stateVal,stateType) =
   case ruleType of
     (VPi _nm _r a f) -> case sub 0 [stateVal] stateType a of
       Err _ -> Nothing
-      NoErr -> Just (binder,ruleVal `app` stateVal,
+      NoErr _ -> Just (binder,ruleVal `app` stateVal,
                        f `app` stateVal)
     _ -> Nothing
 
