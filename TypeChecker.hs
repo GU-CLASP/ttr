@@ -239,18 +239,18 @@ checkTypeEval t = do
 checkSub :: D -> [Val] -> Val -> Val -> Typing ()
 checkSub msg z a v = do
     k <- index <$> ask
-    case sub k z v a of
-      NoErr _ -> return ()
-      Err err -> do
-        oops $ sep [hang 2 msg (pretty v), hang 2 "is not a subtype of" (pretty a), hang 2 "because" (prettyErrConj err), hang 2 "with element" (pretty z)]
+    case testErr (sub k z v a) of
+      Nothing -> return ()
+      Just err -> do
+        oops $ sep [hang 2 msg (pretty v), hang 2 "is not a subtype of" (pretty a), hang 2 "because" err, hang 2 "with element" (pretty z)]
 
 checkConv :: D -> Val -> Val -> Typing ()
 checkConv msg a v = do
     k <- index <$> ask
-    case conv k v a of
-      NoErr _ -> return ()
-      Err err -> do
-        oops $ sep [hang 2 msg (pretty v), hang 2 "is convertible to " (pretty a), hang 2 "because" (prettyErrConj err)]
+    case testErr (conv k v a) of
+      Nothing -> return ()
+      Just err -> do
+        oops $ sep [hang 2 msg (pretty v), hang 2 "is convertible to " (pretty a), hang 2 "because" err]
 
 verifyIsType :: Val -> Bool
 verifyIsType VU = True

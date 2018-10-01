@@ -1,3 +1,4 @@
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -20,8 +21,21 @@ import Algebra.Classes hiding (Sum)
 import Data.List (sort, isSubsequenceOf, intersect)
 import Control.Applicative
 import Control.Monad.Except
+import Control.Monad.Reader
 
 data Proot a = NoErr a | Err [D] deriving Functor
+type Assumption = ()
+newtype ConvM a = ConvM {fromConvM :: ReaderT [Assumption] Proot a}
+  deriving (Functor,Monad,Applicative,Alternative,MonadError D,MonadReader [Assumption])
+type Err = ConvM ()
+
+testErr :: Err -> Maybe D
+testErr (ConvM x) = case runReaderT x [] of
+  NoErr () -> Nothing
+  Err es -> Just (prettyErrConj es)
+  
+noErr :: Err
+noErr = pure ()
 
 instance MonadError D Proot where
   throwError x = Err [x]
@@ -38,8 +52,6 @@ instance Alternative Proot where
   (<|>) (NoErr x) _ = (NoErr x)
   (<|>) _ (NoErr x) = NoErr x
   (<|>) (Err x) (Err y) = Err (x++y)
-
-type Err = Proot ()
 
 
 prettyErrConj :: [D] -> D
@@ -183,9 +195,9 @@ vMeet (VRecordT fs) (VRecordT fs') | botTele x = VMeet (VRecordT fs) (VRecordT f
                                    | otherwise = VRecordT x
   where x = meetFields fs fs'
 -- vMeet (VPi nm a b) (VPi _ a' b') = VPi nm (vJoin a a') (vMeet b b') -- EQUALITY of codomain is needed
-vMeet x y = case conv 0 x y of
-              NoErr () -> x
-              Err _ -> VMeet x y
+vMeet x y = case testErr (conv 0 x y) of
+              Nothing -> x
+              Just _ -> VMeet x y
 
 hasField :: String -> VTele -> Bool
 hasField l fs = l `elem` (map fst (teleBinders fs))
@@ -254,26 +266,25 @@ projVal l u | isNeutral u = VProj l u
 convs :: Int -> [Val] -> [Val] -> Err
 convs k a b = sequence_ $ zipWith (conv k) a b
 
-satisfy :: Bool -> [D] -> Err
-satisfy p err = if p then NoErr () else Err err
+satisfy :: Bool -> D -> Err
+satisfy p err = if p then noErr else throwError err
 
 equal :: (Pretty a, Eq a) => a -> a -> Err
-equal a b = satisfy (a == b) msg
-  where Err msg = different a b
+equal a b = satisfy (a == b) (different a b)
 
 included :: (Pretty a, Ord a) => a -> a -> Err
-included a b = satisfy (a <= b) [sep [pretty a,"⊈",pretty b]]
+included a b = satisfy (a <= b) (sep [pretty a,"⊈",pretty b])
 
-different :: (Pretty a) => a -> a -> Err
-different a b = Err [(sep [pretty a,"≠",pretty b])]
+different :: (Pretty a) => a -> a -> D
+different a b = (sep [pretty a,"≠",pretty b])
 
 noSub :: (Pretty a2, Pretty a, Pretty a1) =>
                a2 -> a1 -> a -> Err
-noSub z a b = Err [sep [pretty a,"not a subtype of",pretty b,"when inhabitant is",pretty z]]
+noSub z a b = throwError (sep [pretty a,"not a subtype of",pretty b,"when inhabitant is",pretty z])
 
 -- | @conv k a b@ Checks that @a@ can be converted to @b@.
 conv :: Int -> Val -> Val -> Err
-conv _ VU VU = NoErr ()
+conv _ VU VU = noErr
 conv k (VSingleton t v) (VSingleton t' v') = conv k t t' >> conv k v v'
 conv k (VLam _ f) (VLam _ g) = do
   let v = mkVar k
@@ -296,7 +307,7 @@ conv k u' (Ter (Lam x _ u) e) = do
 conv k (Ter (Split p t) e) (Ter (Split p' _t') e') =
   (p `equal` p') >> convEnv (uniqSplitFVs t) k e e' -- note : p == p'  --->  t == t'
 conv _ (VSum p)   (VSum p') = equal p p'
-conv k (Ter (Undef p) e) (Ter (Undef p') e') =
+conv _k (Ter (Undef p) _e) (Ter (Undef p') _e') =
   (p `equal` p')
 conv k (VPi _ r u v) (VPi _ r' u' v') = do
   let w = mkVar k
@@ -313,15 +324,14 @@ conv _ (VVar x)     (VVar x')      = x `equal` x'
 conv _ (VAbstract n) (VAbstract n') = n `equal` n'
 conv k (VJoin a b) (VJoin a' b') = (conv k a a' >> conv k b b') <|> (conv k a b' >> conv k b a')
 conv k (VMeet a b) (VMeet a' b') = (conv k a a' >> conv k b b') <|> (conv k a b' >> conv k b a')
-conv _ (VPrim _ _) (VPrim _ _) = NoErr ()
-conv _ x              x'           = different x x'
+conv _ (VPrim _ _) (VPrim _ _) = noErr
+conv _ x              x'           = throwError (different x x')
 
-noErr = NoErr ()
 -- -- @sub _ x:a b@: check that x:a also has type b.
 sub :: Int -> [Val] -> Val -> Val -> Err
 sub _ _ VU VU = noErr
 sub _ _ VBottom _ = noErr
-sub _ _ (VSum xs) (VSum ys) = if sort xs `isSubsequenceOf` sort ys then noErr else Err [pretty xs <+> "has more cases than" <+> pretty ys]
+sub _ _ (VSum xs) (VSum ys) = if sort xs `isSubsequenceOf` sort ys then noErr else throwError (pretty xs <+> "has more cases than" <+> pretty ys)
 sub _ _ _ (VRecordT VEmpty) = noErr
 sub k fs (VPi _ r u v) (VPi _ r' u' v') = do
   let w = mkVar k
@@ -347,14 +357,14 @@ convEnv xs k e e' = sequence_ $ zipWith convMaybe (valOfFreeEnv e) (valOfFreeEnv
     where ee = valOfEnv env
   convMaybe Nothing Nothing = noErr
   convMaybe (Just x) (Just y) = conv k x y
-  convMaybe _ _ = Err ["Variable found in one env but not the other"]
+  convMaybe _ _ = throwError ("Variable found in one env but not the other")
 
 convTele :: Int -> VTele -> VTele -> Err
 convTele _ VEmpty VEmpty = noErr
 convTele k (VBind (l,_) r a t) (VBind (l',_) r' a' t') = do
   let v = mkVar k
   equal r r' >> equal l l' >> conv k a a' >> convTele (k+1) (t v) (t' v)
-convTele _ x x' = different x x'
+convTele _ x x' = throwError (different x x')
 
 subTele :: Int -> [Val] -> VTele -> VTele -> Err
 subTele _ _ _ VEmpty = noErr  -- all records are a subrecord of the empty record
@@ -374,7 +384,7 @@ subTele _ z x x' = noSub z x x'
 convFields :: Int -> [(String,Val)] -> [(String,Val)] -> Err
 convFields _ [] [] = noErr
 convFields k ((l,u):fs) ((l',u'):fs') = equal l l' >> conv k u u' >> convFields k fs fs'
-convFields _ x x' = different x x'
+convFields _ x x' = throwError (different x x')
 
 
 --------------------
@@ -427,7 +437,7 @@ instance Show Val where
   show = render . pretty
 
 prettyLook :: Ident -> Env -> D
-prettyLook x (Pair rho (n@(y,_l),u))
+prettyLook x (Pair rho ((y,_l),u))
   | x == y    = pretty u
   | otherwise = prettyLook x rho
 prettyLook x (PDef es r1) = case lookupIdent x es of
