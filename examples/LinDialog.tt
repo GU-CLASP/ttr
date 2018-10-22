@@ -1,4 +1,7 @@
-\(params : [ Ind : Type
+let Prop : Type
+    Prop = Type
+
+in \ (params : [ Ind : Type
            ; String : Type
            ; City : Type
            ; paris : City
@@ -19,16 +22,19 @@
 	   ; sg'   : greet agent user0
            ; hasName : (s:Ind) -> (name : String) -> Prop
            ; agentName : String
-           ; sAgentName : hasName agent agentName
-	   ; emptyMove : [ spkr    : Ind
-	     	         ; addr    : Ind
-			 ; content : [] ]
+           ; sAgentName : hasName agent agentName]) ->
+ (let open params
+      InitialState : Type
+      InitialState = [spkr : Ind; addr : Ind; p ::1 fresh spkr addr ]
+      Rules : Type
+      Rules = [greetRule : (x : Ind) -> (y : Ind) -> fresh x y -o greet x y ]
+  in \ (initialState : InitialState) ->
+     \ (rules : Rules) ->
+   module
 
+    st : InitialState
+    st = initialState
 
-           ; rules : [greetRule : (x : Ind) -> (y : Ind) -> fresh x y -o greet x y ]
-           ; initialState : [spkr : Ind; addr : Ind; p :: fresh x y ]
-           ; ]) -> module
-
-
-
-
+    r : Rules
+    r = rules
+)

@@ -102,7 +102,7 @@ go :: C.Val -> C.Val -> Interpreter ()
 go v (C.VRecordT atele) = lift $ setTcEnv [n | (n,_) <- C.teleBinders atele]
                                           (TC.addDecls (E.etaExpandRecord atele v,atele))
 go v (C.VPi x _rig _a b) = do
-  outputStrLn $ "Parametric module: entering with abtract parameters"
+  outputStrLn $ "Parametric module: entering with abstract parameters"
   go (E.app v (C.VVar x)) (E.app b (C.VVar x))
 go _ t = outputStrLn $ "Module does not have a record type, but instead:\n" ++ show t
 

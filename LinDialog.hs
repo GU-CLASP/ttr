@@ -64,14 +64,11 @@ iterateRules n rules st = do
 dialogMan :: ModuleReader -> FilePath -> Interpreter ()
 dialogMan = dialogManLoop []
 
-gatherRules :: [(String,Val)] -> VTele -> [(Val,Val)]
-gatherRules _ VEmpty = []
-gatherRules ((_name',v):vs) (VBind name _ t restTele) =
-  let specialVarName = "< DEPENDS >"
-      restTeleTest = restTele (VVar specialVarName)
-  in case specialVarName `occursIn` restTeleTest of
-    True -> []
-    False -> ((v,t):gatherRules vs restTeleTest)
+gatherFields :: Val -> VTele -> [(Val,Rig,Rig,Val)]
+gatherFields _ VEmpty = []
+gatherFields v (VBind name r t restTele) =
+  ((f,r,zero,t):gatherFields v (restTele f)) where
+  f = projVal (fst name) v
 
 dialogManLoop :: State -> ModuleReader -> FilePath -> Interpreter ()
 dialogManLoop state prefix f = do
@@ -80,6 +77,22 @@ dialogManLoop state prefix f = do
   input <- getInputLine "Linear Dialog Manager>"
   case input of
     Just ":q"  -> return ()
+    Just (':':'i':' ':str) -> do
+      l <- lift (loadExpression True prefix "<interactive>" str)
+      case l of
+        Loading -> error "Loading panic"
+        Failed err -> outputStrLn (render err)
+        Loaded v t -> do
+          case (v,t) of
+            (fields, VRecordT atele) -> do
+              outputStrLn "Record found; Yes!"
+              let st = gatherFields fields atele
+              outputStrLn (show (length state) ++ " items found.")
+              dialogManLoop st prefix f
+            _ -> do
+              outputStrLn "Expecting initial state as a record"
+              outputStrLn ("Found instead: \n" ++ (render (pretty t)))
+              cont
     Just (':':'a':' ':str) -> do
       l <- lift (loadExpression True prefix "<interactive>" str)
       case l of
@@ -100,11 +113,11 @@ dialogManLoop state prefix f = do
         Failed err -> outputStrLn (render err)
         Loaded v t -> do
           case (v,t) of
-            (VRecord fields, VRecordT atele) -> do
+            (r, VRecordT atele) -> do
               outputStrLn "Record found; Yes!"
-              let allRules = (gatherRules fields atele) 
+              let allRules = (gatherFields r atele)
               outputStrLn (show (length allRules) ++ " rules found.")
-              case iterateRules 5 allRules state of
+              case iterateRules 5 [(v',t') | (v',_,_,t') <- allRules] state of
                 [] -> outputStrLn "The provided rule set fails after 5 iterations"
                 s':_ -> dialogManLoop s' prefix f
             _ -> do
