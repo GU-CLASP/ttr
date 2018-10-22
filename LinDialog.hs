@@ -37,15 +37,18 @@ selectEntry (x:xs) = (x,xs):map (second (x:)) (selectEntry xs)
 
 
 applyRule :: Val -> Val -> State -> [State]
-applyRule ruleVal ruleType state = case ruleType of
-  VPi _ r s t -> do
+applyRule ruleVal ruleType state =
+  let dflt = return ((ruleVal,one,zero,ruleType):state)
+  in  case ruleType of
+  VPi _ rRequested s t -> do
     ((v,rHave,rUsed,s'),state') <- selectEntry state
     case testErr (sub 0 [] s' s) of
       Just err -> fail (show err)
-      Nothing -> do
-        guard (r + rUsed <= rHave)
-        applyRule (ruleVal `app` v) (t `app` v) ((v,rHave,rUsed+r,s'):state')
-  _ -> return ((ruleVal,one,zero,ruleType):state)
+      Nothing ->
+        if rRequested + rUsed <= rHave
+        then applyRule (ruleVal `app` v) (t `app` v) ((v,rHave,rUsed+rRequested,s'):state')
+        else dflt
+  _ -> dflt
 
 
 applyAnyRule :: [Rule] -> State -> [State]

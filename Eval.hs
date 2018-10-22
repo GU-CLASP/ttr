@@ -407,6 +407,12 @@ convFields _ x x' = throwError (different x x')
 --------------------
 instance Pretty Val where pretty = showVal 0
 
+arrow :: Rig -> D
+arrow (PolarPair (Fin 1 :.. Fin 1) (Fin 0 :.. Fin 0)) = "-o"
+arrow Free = "->"
+arrow r = pretty r <> "->"
+
+
 showVal :: Int -> Val -> D
 showVal ctx t0 = case t0 of
   (VSum branches) -> encloseSep "{" "}" "|" (map pretty branches)
@@ -416,8 +422,8 @@ showVal ctx t0 = case t0 of
   (Ter t env)  -> showTer ctx env t
   (VCon c)  -> ("`" <> pretty c)
   (VPi nm r a f) -> pp 1 $ \p ->
-     if dependent f then withVar nm $ \v -> (parens (pretty v <+> prettyBind r <+> pretty a) <+> "->") </> p (f `app` (VVar v))
-     else (showVal 2 a  <+> "->") </> p (f `app` (VVar "_"))
+     if dependent f then withVar nm $ \v -> (parens (pretty v <+> prettyBind r <+> pretty a) <+> arrow r) </> p (f `app` (VVar v))
+     else (showVal 2 a  <+> arrow r) </> p (f `app` (VVar "_"))
   (VApp _ _)   -> pp 4 (\p -> hang 2 (p u) (showArgs vs))
      where (u:vs) = fnArgs t0
   (VSplit (Ter (Split _ branches) env) v) -> sep [

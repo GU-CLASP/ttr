@@ -49,7 +49,7 @@ pseudoIdents :: Exp -> Maybe [AIdent]
 pseudoIdents = mapM unVar . uncurry (:) . flip unApps []
 
 decodeWeight :: Weight -> Rig
-decodeWeight (Exact amount) = PolarPair (Fin amount :.. Fin amount) (Fin amount :.. Fin amount)
+decodeWeight (Exact amount) = PolarPair (Fin amount :.. Fin amount) C.ZeroIntvl
 decodeWeight Positive = PolarPair C.FreeInterval C.ZeroIntvl
 decodeWeight Negative = PolarPair C.ZeroIntvl C.FreeInterval
 
