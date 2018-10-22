@@ -110,3 +110,7 @@ instance {-# OVERLAPS #-} Pretty String where
 instance (Pretty a, Pretty b) => Pretty (a,b) where
   pretty (x,y) = "(" <> pretty x <> "," <> pretty y <> ")"
 
+
+instance (Pretty a, Pretty b, Pretty c, Pretty d) => Pretty (a,b,c,d) where
+  pretty (x,y,z,w) = "(" <> pretty x <> "," <> pretty y <> "," <> pretty z <> "," <> pretty w <> ")"
+

@@ -1,0 +1,34 @@
+\(params : [ Ind : Type
+           ; String : Type
+           ; City : Type
+           ; paris : City
+           ; london : City
+           ; Time : Type
+           ; tomorrow : Time
+           ; Travel : [from : City; to : City; time : Time] -> Prop
+           ; Food : Type
+           ; Drink : Type
+           ; beer : Drink
+           ; chips : Food
+           ; Order : Food -> Drink -> Prop
+           ; user0 : Ind
+           ; agent : Ind
+           ; greet : Ind -> Ind -> Type
+           ; fresh : Ind -> Ind -> Type
+	   ; sg    : (s:Ind) -> (a:Ind) -> greet s a
+	   ; sg'   : greet agent user0
+           ; hasName : (s:Ind) -> (name : String) -> Prop
+           ; agentName : String
+           ; sAgentName : hasName agent agentName
+	   ; emptyMove : [ spkr    : Ind
+	     	         ; addr    : Ind
+			 ; content : [] ]
+
+
+           ; rules : [greetRule : (x : Ind) -> (y : Ind) -> fresh x y -o greet x y ]
+           ; initialState : [spkr : Ind; addr : Ind; p :: fresh x y ]
+           ; ]) -> module
+
+
+
+

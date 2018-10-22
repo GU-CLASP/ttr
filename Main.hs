@@ -21,6 +21,7 @@ import qualified Eval as E
 import Pretty
 import Loader
 import DialogMan (dialogMan)
+import LinDialog (dialogMan)
 
 type Interpreter a = InputT Loader a
 
@@ -122,7 +123,10 @@ loop flags prefix f = do
                              cont
       | otherwise      -> initLoop flags prefix str
     Just ":d" -> do
-          dialogMan prefix "Dialog"
+          DialogMan.dialogMan prefix "Dialog"
+          cont
+    Just ":ld" -> do
+          LinDialog.dialogMan prefix "LinDialog"
           cont
     Just (':':'c':'d':' ':str) -> do liftIO (setCurrentDirectory str)
                                      cont
