@@ -73,10 +73,13 @@ gatherFields v (VBind name r t restTele) =
   ((f,r,zero,t):gatherFields v (restTele f)) where
   f = projVal (fst name) v
 
+entrySho :: Entry -> (Rig,Rig,Val)
+entrySho (_,rHave,rUsed,t) = (rHave,rUsed,t)
+
 dialogManLoop :: State -> ModuleReader -> FilePath -> Interpreter ()
 dialogManLoop state prefix f = do
   let cont = dialogManLoop state prefix f
-  outputStrLn (render ("state value:" </> pretty state))
+  outputStrLn (render ("state (type):" </> pretty (map entrySho state)))
   input <- getInputLine "Linear Dialog Manager>"
   case input of
     Just ":q"  -> return ()
