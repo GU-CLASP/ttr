@@ -12,7 +12,7 @@ separator Fld ",";
 
 DeclDef.    Decl ::= AIdent [AIdent] "=" ExpWhere ;
 DeclType.   Decl ::= AIdent ":" Exp ;
-DeclOpen.   Decl ::= "open" Exp ;
+DeclOpen.   Decl ::= "open" Exp ; 
 DeclMutual. Decl ::= "mutual" "{" [Decl] "}" ;
 separator   Decl ";" ;
 
@@ -28,7 +28,7 @@ Pi.       Exp1 ::= "(" PseudoTDecl ")" "->" Exp1 ;
 Or.       Exp2 ::= Exp2 "\\/" Exp2;
 And.      Exp3 ::= Exp3 "/\\" Exp3;
 App.      Exp4 ::= Exp4 Exp5 ;
-Singleton. Exp5 ::= Exp5 "(= " Exp ")" ;
+Singleton. Exp5 ::= Exp5 "/"  Exp;
 Proj.     Exp5 ::= Exp5 "." AIdent ;
 Module.   Exp6 ::= "module" "{" [Decl] "}" ;
 Tuple.    Exp6 ::= "(" [Fld] ")" ;

@@ -11,6 +11,7 @@ import Control.Monad.Reader
 import Data.String
 import Data.Char (isDigit)
 import qualified Data.Map as M
+import Data.Semigroup
 
 --------------------------------------------------------------------------------
 -- | Pretty printing combinators. Use the same names as in the pretty library.
@@ -54,8 +55,9 @@ instance Show D where
 class Pretty a where
   pretty :: a -> D
 
+instance Semigroup D where
+  (<>) = liftM2 (<>)
 instance Monoid D where
-  mappend = liftM2 (<>)
   mempty = return mempty
 
 showy :: Show a => a -> D

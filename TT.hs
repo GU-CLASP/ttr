@@ -139,11 +139,12 @@ instance Term (Ter' a) where
 data VTele = VEmpty | VBind Binder Rig Val (Val -> VTele)
            | VBot -- Hack!
 
+instance Semigroup VTele where
+  VEmpty <> x = x
+  VBot <> _ = error "VBOT"
+  (VBind x r a xas) <> ys = VBind x r a (\v -> xas v <> ys)
 instance Monoid VTele where
   mempty = VEmpty
-  mappend VEmpty x = x
-  mappend VBot _ = error "VBOT"
-  mappend (VBind x r a xas) ys = VBind x r a (\v -> xas v <> ys)
 
 teleBinders :: VTele -> [Binder]
 teleBinders (VBind x _ _ f) = x:teleBinders (f $ error "teleBinders: cannot look at values")

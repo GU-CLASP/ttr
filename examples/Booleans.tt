@@ -22,7 +22,7 @@ if : (a : Type) -> Bool -> (x ::+ a) -> (y ::+ a) -> a
 if a c x y = iffliped a x y c
 
 True : Type
-True = {'yes} (= 'yes)
+True = {'yes} / ('yes)
 
 true : True
 true = 'yes

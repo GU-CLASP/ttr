@@ -304,8 +304,9 @@ checkInfer e = case e of
   RecordT [] -> return (RecordT [], VU)
   RecordT ((x,rig,a):as) -> do
     (aa,a') <- checkTypeEval a
-    RecordT as' <- withLocal (x,zero,a') $ checkType (RecordT as)
-    return (RecordT ((x,rig,aa):as'), VU)
+    typ <- withLocal (x,zero,a') $ checkType (RecordT as)
+    case typ of
+      RecordT as' -> return (RecordT ((x,rig,aa):as'), VU)
   U -> return (U,VU)                 -- U : U
   Var n -> do
     gam <- ctxt <$> ask
@@ -313,8 +314,8 @@ checkInfer e = case e of
       Just (b,v)  -> use b >> return (Var n,v)
       Nothing -> oops $ pretty n <> " is not declared"
   App t u -> do
-    (t',t'') <- checkInfer t
-    (u',retTyp,_) <- checkInferApp u t''
+    (t',t'typ) <- checkInfer t
+    (u',retTyp,_) <- checkInferApp u t'typ
     return (App t' u', retTyp)
   Proj l t -> do
     (t',a) <- relax (neutral (zero :.. one)) (checkInfer t)
@@ -354,7 +355,7 @@ checkInferApp u (VMeet x y) = do
   (u',typ1,valOfU) <- checkInferApp u x `catchError` \_ -> checkInferApp u y
   (_ ,typ2,_) <- checkInferApp u y `catchError` \_ -> return (u',typ1,valOfU)
   return (u',vMeet typ1 typ2,valOfU)
-checkInferApp _ c = oops $ pretty c <> " is not a product"
+checkInferApp _ c = oops (pretty c <> " is not a product")
 
 
 checkInferProj :: String -> {- ^ field to project-} Val -> {- ^ record value-} Val -> {- ^ record type-} Typing Val

@@ -1,6 +1,5 @@
-js: *.hs Exp/Par.hs Exp/Lex.hs
-	nix-shell ghcjs/shell.nix --run "ghcjs --make JS"
-		cp examples/*.tt JS.jsexe
+
+
 
 bnfc: Exp/Lex.x
 
@@ -19,7 +18,11 @@ Exp/Lex.x Exp/Par.y: Exp.cf
 clean:
 	rm -f *.log *.aux *.hi *.o *.js_o *.js_hi Exp/*
 
-stack-setup:
-	nix-shell stack/shell.nix --pure --run "stack --stack-yaml=stack/stack.yaml setup"
+js: *.hs Exp/Par.hs Exp/Lex.hs
+	nix-shell ghcjs/shell.nix --run "ghcjs --make JS"
+		cp examples/*.tt JS.jsexe
+
+# stack-setup:
+# 	nix-shell stack/shell.nix --pure --run "stack --stack-yaml=stack/stack.yaml setup"
 
 

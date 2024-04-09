@@ -44,7 +44,7 @@ instance MonadError D Proot where
   catchError (NoErr x) _ = NoErr x
 
 instance Applicative Proot where
-  pure = return
+  pure =  NoErr
   (<*>) = ap
 
 instance Alternative Proot where
@@ -58,7 +58,6 @@ prettyErrConj :: [D] -> D
 prettyErrConj (errs) = encloseSep "" "" " and " errs
 
 instance Monad Proot where
-  return = NoErr
   (Err x) >>= _ = Err x
   NoErr x >>= f = f x
 
