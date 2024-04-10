@@ -77,8 +77,8 @@ etaExpandRecord VBot _ = error "VBot escaped"
 etaExpandRecord (VBind (x,_) _rig  _ xs) r = let v = projVal x r in v:etaExpandRecord (xs v) r
 
 evalDecls :: TDecls Val -> Env -> (Env,[(String,Val)])
-evalDecls (Mutual decls) ρ = (ρ',[(x,eval ρ' y) | ((x,_),_,y) <- decls])
-  where ρ' = PDef [ (x,y) | (x,_,y) <- decls ] ρ
+evalDecls (Mutual decls) ρ = (ρ',[(x,eval ρ' y) | Decl (x,_) _ y <- decls])
+  where ρ' = PDef [ (x,y) | Decl x _ y <- decls ] ρ
 evalDecls (Open (VRecordT tele) t) ρ = (foldl Pair ρ (zip (teleBinders tele) vs),[])
   where vs = etaExpandRecord tele (eval ρ t)
 evalDecls (Open _ _) _ = error "panic: open of non-record"
@@ -362,7 +362,6 @@ sub k x a@(Ter (Split p t) e) a'@(Ter (Split p' t') e') = conv k a a' <|> do
             Nothing -> error "sub: Split: panic"
 sub k _ x x' = conv k x x'
 
-
 anyOf :: [Err] -> Err
 anyOf [] = error "anyOf: at least one choice is necessary!"
 anyOf x = foldr1 (<|>) x
@@ -454,7 +453,6 @@ dependent f =  "__DEPENDS?__" `occursIn` (f `app` VVar "__DEPENDS?__")
 showArgs :: [Val] -> D
 showArgs = sep . map (showVal 5)
 
-
 instance Show Val where
   show = render . pretty
 
@@ -466,7 +464,6 @@ prettyLook x (PDef es r1) = case lookupIdent x es of
   Just ((y,_loc),_t)  -> pretty y --  <> "[DEF]"
   Nothing ->   prettyLook x r1
 prettyLook x Empty = pretty x {- typically bound in a Split -}
-
 
 prettyTele :: VTele -> [D]
 prettyTele VEmpty = []
@@ -488,14 +485,14 @@ showEnv e0 = case e0 of
     (PDef _xas env)   -> showEnv env
     (Pair env ((x,_),u)) -> (hang 2 (pretty x <+> "=") (pretty u)) : showEnv env
 
-instance Pretty (Ter' a) where
+instance Pretty a => Pretty (Ter' a) where
   pretty = showTer 0 Empty
 
-showTele :: Env -> Tele a -> [D]
+showTele :: Pretty a => Env -> Tele a -> [D]
 showTele _ [] = mempty
 showTele ρ (((x,_loc),r,t):tele) = (pretty x <+> prettyBind r <+> showTer 0 ρ t) : showTele ρ tele
 
-showTer :: Int -> Env -> Ter' a -> D
+showTer :: forall a. Pretty a => Int -> Env -> Ter' a -> D
 showTer ctx ρ t0 = case t0 of
    Import i _    -> sep ["import",pretty i]
    Module ds     -> hang 2 "module"  (vcat (map (showDecls ρ) ds))
@@ -528,21 +525,21 @@ fnArgsTer :: Ter' t -> [Ter' t]
 fnArgsTer (App u v) = fnArgsTer u ++ [v]
 fnArgsTer x = [x]
 
-showSplitBranches :: Env -> [Brc a] -> D
+showSplitBranches :: Pretty a => Env -> [Brc a] -> D
 showSplitBranches ρ branches = encloseSep "{" "}" ";"
   [hang 2 (pretty l <+> "↦") (showTer 0 ρ t)  | (l,t) <- branches]
 
 instance Pretty Ctxt where
   pretty ctxt = vcat [pretty nm <+> ":" <+> pretty typ | ((nm,_),typ) <- ctxt]
 
-showTersArgs :: Env -> [Ter' a] -> D
+showTersArgs :: Pretty a => Env -> [Ter' a] -> D
 showTersArgs ρ = sep . map (showTer 5 ρ)
 
-showDecl :: Pretty a => Env -> (a, Ter' b, Ter' b) -> D
-showDecl ρ (b,typ,ter) = vcat [pretty b <+> ":" <+> showTer 0 ρ typ,
-                               pretty b <+> "=" <+> showTer 0 ρ ter]
+showDecl :: Pretty a => Env -> Decl a -> D
+showDecl ρ (Decl b typ ter) = vcat [pretty b <+> ":" <+> showTer 0 ρ typ,
+                                    pretty b <+> "=" <+> showTer 0 ρ ter]
 
-showDecls :: Env -> TDecls a -> D
+showDecls :: Pretty a => Env -> TDecls a -> D
 showDecls ρ (Open _ x) = "open " <> showTer 0 ρ x
 showDecls ρ (Mutual defs) = vcat (map (showDecl ρ) defs)
 

@@ -59,8 +59,8 @@ checkUsage b@(name,loc) br k = do
 
 -- Environment for type checker
 data TEnv = TEnv { index   :: Int   -- for de Bruijn levels
-                 , env     :: Env
-                 , ctxt    :: Ctxt
+                 , env     :: Env -- ^ map of variables to values
+                 , ctxt    :: Ctxt -- ^ map of variables to their types
                  , errCtx  :: [D]
                  , modules :: Modules
                  }
@@ -82,6 +82,7 @@ oops msg = do
 emptyEnv :: Modules -> TEnv
 emptyEnv  = TEnv 0 Empty [] []
 
+-- | Locally declare a variable, with a given value and weight.
 withLocal :: forall a. (Binder, Rig, Val) -> Typing a -> Typing a
 withLocal (x,r,a') t = local (addTypeVal (x,a')) (checkUsage x r t)
 
@@ -121,7 +122,6 @@ runInfer lenv t = runTyping lenv $ do
 getFresh :: Typing Val
 getFresh = mkVar <$> index <$> ask
 
-
 checkDecls :: TDecls () -> Typing (TDecls Val,Recordoid)
 checkDecls (Open () r) = do
   (r',t) <- checkInfer r
@@ -131,14 +131,16 @@ checkDecls (Open () r) = do
       return (Open t r',(etaExpandRecord tele (eval e r'),tele))
     _ -> oops $ "attempt to open something which is not a record"
 checkDecls (Mutual d) = do
-  let (idents, tele, ters) = (declIdents d, declTele d, declTers d)
+  let idents = map (fst . declBinder) d
+      tele = [ (declBinder,Free,declType) | Decl {..} <- d]
+      defs = map declDef d
   trace (sep ["Checking: ", sep (map fromString idents)])
   tele' <- checkTele tele
   e <- asks env
   let vtele = evalTele e tele'
-  ters' <- local (addTeleVal vtele) (checks vtele ters)
-  let d' = zipWith (\(b,_r,ty) t -> (b,ty,t)) tele' ters'
-  return (Mutual d',(map (eval (PDef (zip (map frst tele) ters') e)) ters', vtele)) -- allowing recursive definitions
+  defs' <- local (addTeleVal vtele) (checks vtele defs)
+  let d' = zipWith (\(b,_r,ty) t -> Decl b ty t) tele' defs'
+  return (Mutual d',(map (eval (PDef (zip (map frst tele) defs') e)) defs', vtele)) -- allowing recursive definitions
 
 frst :: (t2, t1, t) -> t2
 frst (x,_,_) = x
@@ -159,9 +161,9 @@ checkTele ((x,r,a):xas) = do
 checkLogg :: Val -> Ter -> Typing CTer
 checkLogg v t = logg (sep ["Checking that " <> pretty t, "has type " <> pretty v]) $ check v t
 
--- Check that t has type has type a and evaluate t.
+-- | Check that term t has type has type a and evaluate t.
 
--- TODO: sometimes, checking will yield a more precise (subtype),
+-- TODO: sometimes, checking will yield a more precise (sub)type,
 -- which should also be returned by this function.
 check :: Val -> Ter -> Typing CTer
 check a t = case (a,t) of
@@ -169,7 +171,7 @@ check a t = case (a,t) of
     (t',t'') <- checkEval s t
     checkConv "singleton" t'' u
     return t'
-  (VPi x r (VSum cas) f,Split loc ces) -> do
+  (VPi _x r (VSum cas) f,Split loc ces) -> do
     let cas' = sort cas
         ces' = sortBy (compare `on` fst) ces
     if cas' == map fst ces'
@@ -377,6 +379,7 @@ checkInferProj' l r (VBind (x,_) _rig a rest)
   | otherwise = checkInferProj' l r (rest (projVal x r))
 checkInferProj' _ _ VBot = error "checkInferProj: VBot escaped from meet"
 
+-- | Check several terms against a telescope
 checks :: VTele -> [Ter] -> Typing [CTer]
 checks _              []     = return []
 checks (VBind _ rig v xas) (e:es) = do

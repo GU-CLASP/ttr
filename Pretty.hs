@@ -54,7 +54,8 @@ instance Show D where
 
 class Pretty a where
   pretty :: a -> D
-
+instance Pretty () where
+  pretty () = "()"
 instance Semigroup D where
   (<>) = liftM2 (<>)
 instance Monoid D where

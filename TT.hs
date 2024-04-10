@@ -1,3 +1,4 @@
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE EmptyCase #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TypeSynonymInstances #-}
@@ -7,7 +8,6 @@
 module TT where
 
 import Prelude hiding (Num(..), pi)
-import Data.Monoid
 import Data.Dynamic
 import Pretty 
 import Algebra.Classes hiding (Sum)
@@ -53,25 +53,17 @@ type LblSum = [String]
 type Ctxt   = [(Binder,Val)]
 
 -- Mutual recursive definitions: (x1 : A1) .. (xn : An) and x1 = e1 .. xn = en
-type Decls a  = [(Binder,Ter' a,Ter' a)]
+data Decl a = Decl {declBinder :: Binder, declType :: Ter' a, declDef :: Ter' a} deriving Eq
+type Decls a  = [Decl a]
 data TDecls a = Open a {- type of the opened term -} (Ter' a) | Mutual (Decls a)
   deriving Eq
 
-declIdents :: Decls a -> [Ident]
-declIdents decl = [ x | ((x,_),_,_) <- decl]
-
-declTers :: Decls a -> [Ter' a]
-declTers decl = [ d | (_,_,d) <- decl]
-
-declTele :: Decls a -> Tele a
-declTele decl = [ (x,Free,t) | (x,t,_) <- decl]
-
-declDefs :: Decls () -> [(Binder,Ter)]
-declDefs decl = [ (x,d) | (x,_,d) <- decl]
 
 -- Terms
 type Ter = Ter' ()
 type CTer = Ter' Val
+
+-- | Term annotated with import values and types (a)
 data Ter' a = App (Ter' a) (Ter' a)
             | Pi String Rig (Ter' a) (Ter' a)
             | Lam Binder (Maybe (Ter' a)) (Ter' a)
@@ -103,7 +95,7 @@ class Term a where
 
 instance Term (TDecls a) where
   freeVars = \case
-    Mutual ts -> concat [freeVars s ++ freeVars t | (_,s,t) <- ts]
+    Mutual ts -> concat [freeVars s ++ freeVars t | Decl _ s t <- ts]
     Open _ t -> freeVars t
 
 uniqSplitFVs :: [Brc a] -> [Ident]
@@ -251,7 +243,7 @@ instance Ord a => Ord (Interval a) where
 instance Ord a => Ord (PolarPair a) where
   PolarPair a b <= PolarPair c d = a <= c && b <= d
 data Val = VU
-         | Ter CTer Env
+         | Ter CTer Env -- an embedded type-checked closure (term + env)
          | VPi String Rig Val Val
          | VRecordT VTele
          | VRecord [(String,Val)]
@@ -285,7 +277,7 @@ isNeutral _            = False
 
 data Env = Empty
          | Pair Env (Binder,Val)
-         | PDef [(Binder,CTer)] Env
+         | PDef [(Binder,CTer)] Env -- ^ unevaluated terms
 
 upds :: Env -> [(Binder,Val)] -> Env
 upds = foldl Pair

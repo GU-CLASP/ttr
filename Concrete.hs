@@ -179,7 +179,7 @@ resolveMutuals decls = do
     when (names /= map fst rddecls) $
       throwError $ "Mismatching names in" <+> showy decls
     rtdecls <- resolveTele tdecls
-    return ([ (x,t,d) | (x,_r,t) <- rtdecls | (_,d) <- rddecls ])
+    return ([ C.Decl x t d | (x,_r,t) <- rtdecls | (_,d) <- rddecls ])
   where
     idents = [ x | DeclType x _ <- decls ]
     names  = [ unAIdent x | x <- idents ]
