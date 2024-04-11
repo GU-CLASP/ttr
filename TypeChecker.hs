@@ -268,7 +268,7 @@ checkType t = do
     else oops $ sep ["expected a type, but got", pretty t, "which as type",pretty a]
 
 unsafeInfer :: TEnv -> Ter -> Val
-unsafeInfer e t = case (runInfer e t) of
+unsafeInfer e t = case runInfer e t of
   (Right (_,v),_) -> v
 
 -- | Infer the type of the argument, and evaluate it.

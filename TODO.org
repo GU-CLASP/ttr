@@ -8,27 +8,43 @@ define a = b as a <= b and b <= a.
 This is useful to capture more equalities between meet and joins.
 Must be careful with recursive cases.
 
-** Polarised function types
+** Polarised function types and subtyping
 
-f : (x :+ A) -> B
+The subtyping rule for functions is:
+    A ⊑ A'       B ⊑ B'
+------------------------------
+        A' -> B  ⊑  A -> B'
 
-and so:
+Let's say that the (->) type constructor keeps track of polarity of
+occurences modalities ⊕ and ⊝:
 
-f a <= f b  iff  a <= b
+(->) : ⊝Type -> ⊕Type -> Type
 
-This allows to capture subtyping without a specifc judgement:
+Furthermore, the system can be arranged such that, for every f : ⊕Type -> Type, then
+
+  A ⊑ A'
+------------------
+f A ⊑ f A'
+
+(and symmetrically for ⊝)
+
+Then we can internalise the notion of subtyping:
+
+Subtype A B = (P : (x : ⊕Type) -> Type) -> P A -> P B
+
+And, whenever B ⊑ A:
+
+sub :: Subtype A B
+sub P x = x
 
 
-Subtype A B = (P : (x :+ Type) -> Type) -> P A -> P B
+We also get a coercion function from subtyping:
 
+coerce : Subtype A B -> A -> B
+coerce q = q (\x -> x)
 
-We could also capture subtypes as follows:
-
-
+(((We could also capture subtypes as follows:
 Subtype' A B = [f : A -> B; p : f x = x]
+But = must be heterogeneous. This is a bit tricky.)))
 
-But = must be heterogeneous. This is a bit tricky.
 
-
-Note that we can get a convertion function from 'Subtype'. We can also
-show that it is an identity.
