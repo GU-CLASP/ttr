@@ -53,7 +53,8 @@ mutual
   Index': (A : Type) -> (tag : Bool) -> (MaybeList A tag) -> Type
   Index' A = split
     'no -> \content -> {}
-    'yes -> \content -> [tag : {'here | 'there}; content : Index A content.tail]
+    'yes -> \content -> [tag : {'here | 'there};
+                         content : Index A content.tail]
 
 mutual
   delete : (A : Type) -> (xs : List A) -> Index A xs -> List A
@@ -72,12 +73,12 @@ mutual
 mutual
   lookup : (A : Type) -> (xs : List A) -> Index A xs -> A
   lookup A xs = lookup' A xs.tag xs.content
-
+  
   lookup' : (A : Type) -> (tag : Bool) -> (xs : MaybeList A tag) -> Index' A tag xs -> A
   lookup' A = split
     'no -> \xs ix -> ix -- because ix : {} and {} :< X for any type X.
     'yes -> \xs ix -> lookup'' A xs ix.tag ix.content  -- xs : List1 A; ix : 
-
+    
   lookup'' : (A : Type) -> (xs : List1 A) -> (tag : {'here | 'there}) -> Index A xs.tail -> A
   lookup'' A xs = split
      'here -> \_ -> xs.head
